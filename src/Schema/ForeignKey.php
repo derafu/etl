@@ -29,7 +29,7 @@ final class ForeignKey implements ForeignKeyInterface
     /**
      * The local columns of the foreign key.
      *
-     * @var string[]
+     * @var array<int, string>
      */
     private array $localColumns = [];
 
@@ -43,7 +43,7 @@ final class ForeignKey implements ForeignKeyInterface
     /**
      * The foreign columns of the foreign key.
      *
-     * @var string[]
+     * @var array<int, string>
      */
     private array $foreignColumns = [];
 
@@ -65,8 +65,8 @@ final class ForeignKey implements ForeignKeyInterface
      * Constructor.
      *
      * @param string $foreignTableName The foreign table name.
-     * @param string[] $localColumns The local column names.
-     * @param string[] $foreignColumns The foreign column names.
+     * @param array<int, string> $localColumns The local column names.
+     * @param array<int, string> $foreignColumns The foreign column names.
      * @param string|null $name The constraint name
      */
     public function __construct(

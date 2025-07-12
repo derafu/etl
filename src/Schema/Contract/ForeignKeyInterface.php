@@ -38,14 +38,14 @@ interface ForeignKeyInterface
     /**
      * Get the local column names involved in this foreign key.
      *
-     * @return string[] Array of local column names.
+     * @return array<int, string> Array of local column names.
      */
     public function getLocalColumns(): array;
 
     /**
      * Set the local column names involved in this foreign key.
      *
-     * @param string[] $columnNames Array of local column names.
+     * @param array<int, string> $columnNames Array of local column names.
      * @return self
      */
     public function setLocalColumns(array $columnNames): self;
@@ -68,14 +68,14 @@ interface ForeignKeyInterface
     /**
      * Get the foreign column names this key references.
      *
-     * @return string[] Array of foreign column names.
+     * @return array<int, string> Array of foreign column names.
      */
     public function getForeignColumns(): array;
 
     /**
      * Set the foreign column names this key references.
      *
-     * @param string[] $columnNames Array of foreign column names.
+     * @param array<int, string> $columnNames Array of foreign column names.
      * @return self
      */
     public function setForeignColumns(array $columnNames): self;

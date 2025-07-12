@@ -22,6 +22,7 @@ use Doctrine\DBAL\Schema\Column as DoctrineColumn;
 use Doctrine\DBAL\Schema\Schema as DoctrineSchema;
 use Doctrine\DBAL\Schema\Table as DoctrineTable;
 use Doctrine\DBAL\Types\Type as DoctrineType;
+use InvalidArgumentException;
 
 /**
  * Converts a schema to a Doctrine DBAL Schema.
@@ -160,6 +161,12 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
         DoctrineTable $doctrineTable,
         ForeignKeyInterface $foreignKey
     ): DoctrineTable {
+        if (empty($foreignKey->getLocalColumns()) || empty($foreignKey->getForeignColumns())) {
+            throw new InvalidArgumentException(
+                'Foreign key must have local and foreign columns.'
+            );
+        }
+
         $options = [];
 
         if ($foreignKey->getOnDelete() !== null) {
@@ -194,6 +201,11 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
     ): DoctrineTable {
         $name = $index->getName();
         $columns = $index->getColumns();
+
+        if (empty($columns)) {
+            throw new InvalidArgumentException('Index must have columns.');
+        }
+
         $isUnique = $index->isUnique();
         $flags = $index->getFlags();
 
