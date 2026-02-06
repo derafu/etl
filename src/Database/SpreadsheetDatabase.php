@@ -162,7 +162,7 @@ final class SpreadsheetDatabase extends AbstractDatabase implements DatabaseInte
      */
     protected function loadFromArray(array $source, array $options = []): int
     {
-        // TODO: Implement this.
+        // TODO: Implement loadFromArray() method.
         return 0;
     }
 
@@ -202,8 +202,9 @@ final class SpreadsheetDatabase extends AbstractDatabase implements DatabaseInte
         }
 
         // Nothing to drop. We keep the current connection and load the data.
-        // TODO: Implement this. It must load each sheet without dropping the
-        // current data. Just add or update the data.
+        // TODO: Implement load without dropping the data.
+        // It must load each sheet without dropping the current data,
+        // just add or update the data.
         // WARNING: For NOW, we just load the data from the source spreadsheet.
         // And lost the current data.
         $this->connection = $sourceSpreadsheet;
