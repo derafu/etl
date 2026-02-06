@@ -25,18 +25,18 @@
         }
     },
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
         "derafu/translation": "dev-main",
         "derafu/spreadsheet": "dev-main",
-        "phpoffice/phpspreadsheet": "^4.1",
-        "doctrine/dbal": "^4.2",
-        "symfony/console": "^7.2"
+        "phpoffice/phpspreadsheet": "^5.4",
+        "doctrine/dbal": "^4.4",
+        "symfony/console": "^7.4"
     },
     "require-dev": {
         "ext-xdebug": "*",
-        "friendsofphp/php-cs-fixer": "^3.63",
+        "friendsofphp/php-cs-fixer": "^3.93",
         "phpstan/phpstan": "^1.12",
-        "phpunit/phpunit": "^11.4"
+        "phpunit/phpunit": "^11.5"
     },
     "suggest": {
         "doctrine/dbal": "Required for working with databases using Doctrine DBAL.",
