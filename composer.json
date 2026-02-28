@@ -25,7 +25,7 @@
         }
     },
     "require": {
-        "php": "^8.4",
+        "php": "^8.5",
         "derafu/translation": "dev-main",
         "derafu/spreadsheet": "dev-main",
         "phpoffice/phpspreadsheet": "^5.4",
@@ -34,7 +34,7 @@
     },
     "require-dev": {
         "ext-xdebug": "*",
-        "friendsofphp/php-cs-fixer": "^3.93",
+        "friendsofphp/php-cs-fixer": "^3.94",
         "phpstan/phpstan": "^1.12",
         "phpunit/phpunit": "^11.5"
     },
