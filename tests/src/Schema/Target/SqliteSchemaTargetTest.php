@@ -49,7 +49,6 @@ final class SqliteSchemaTargetTest extends TestCase
         $sqlOutput = $schemaTarget->applySchema($schema);
 
         // Verify the output is a non-empty string.
-        $this->assertIsString($sqlOutput);
         $this->assertNotEmpty($sqlOutput);
 
         // Verify SQL structure
@@ -184,7 +183,6 @@ final class SqliteSchemaTargetTest extends TestCase
         $sqlOutput = $schemaTarget->applySchema($schema);
 
         // Verify the output is a non-empty string.
-        $this->assertIsString($sqlOutput);
         $this->assertNotEmpty($sqlOutput);
 
         // Verify that formatting is different.
@@ -223,8 +221,6 @@ final class SqliteSchemaTargetTest extends TestCase
             // Execute the generated SQL.
             $pdo->exec($sqlOutput);
 
-            // If we've made it here, the SQL is valid.
-            $this->assertTrue(true, "Generated SQL executed successfully.");
 
             // Verify that tables were created.
             $stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");

@@ -47,7 +47,6 @@ final class MarkdownSchemaTargetTest extends TestCase
         $markdownOutput = $schemaTarget->applySchema($schema);
 
         // Verify the output is a non-empty string.
-        $this->assertIsString($markdownOutput);
         $this->assertNotEmpty($markdownOutput);
 
         // Verify markdown structure.
@@ -119,7 +118,7 @@ final class MarkdownSchemaTargetTest extends TestCase
             "Output should have an indexes section."
         );
         $this->assertStringContainsString(
-            "| Name | Columns | Type | Flags |",
+            "| Name | Columns | Type | Clustered |",
             $markdownOutput,
             "Output should have an indexes table."
         );

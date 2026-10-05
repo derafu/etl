@@ -25,7 +25,7 @@ final class SchemaMockTest extends TestCase
     public function testDoctrineSchema(): void
     {
         // Create a mock SchemaSourceInterface that will be implemented later.
-        $schemaSource = $this->createMock(SchemaSourceInterface::class);
+        $schemaSource = $this->createStub(SchemaSourceInterface::class);
 
         // Define what our mock should return when extractSchema is called.
         $schema = new Schema();
@@ -54,10 +54,10 @@ final class SchemaMockTest extends TestCase
         $this->assertEmpty($schema->getTables());
 
         // Create mock tables.
-        $table1 = $this->createMock(TableInterface::class);
+        $table1 = $this->createStub(TableInterface::class);
         $table1->method('getName')->willReturn('table1');
 
-        $table2 = $this->createMock(TableInterface::class);
+        $table2 = $this->createStub(TableInterface::class);
         $table2->method('getName')->willReturn('table2');
 
         // Add tables.

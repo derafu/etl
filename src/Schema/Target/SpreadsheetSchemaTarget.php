@@ -184,8 +184,8 @@ class SpreadsheetSchemaTarget implements SchemaTargetInterface
             'name' => $table->getName() . '.' . $index->getName(),
             'properties' => [
                 'columns' => $index->getColumns(),
-                'unique' => $index->isUnique(),
-                'flags' => $index->getFlags(),
+                'type' => $index->getType()->value,
+                'clustered' => $index->isClustered(),
             ],
         ]);
     }

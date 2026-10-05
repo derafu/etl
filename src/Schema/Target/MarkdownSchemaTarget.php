@@ -18,6 +18,7 @@ use Derafu\ETL\Schema\Contract\IndexInterface;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
 
 /**
  * Generates a Markdown representation of a database schema.
@@ -94,7 +95,7 @@ final class MarkdownSchemaTarget implements SchemaTargetInterface
         $indexes = $table->getIndexes();
         if (!empty($indexes)) {
             $output .= "### Indexes\n\n";
-            $output .= "| Name | Columns | Type | Flags |\n";
+            $output .= "| Name | Columns | Type | Clustered |\n";
             $output .= "|------|---------|------|-------|\n";
 
             foreach ($indexes as $index) {
@@ -178,10 +179,15 @@ final class MarkdownSchemaTarget implements SchemaTargetInterface
     {
         $name = $index->getName();
         $columns = "`" . implode("`, `", $index->getColumns()) . "`";
-        $type = $index->isUnique() ? "UNIQUE" : "INDEX";
-        $flags = implode(", ", $index->getFlags());
+        $type = match ($index->getType()) {
+            IndexType::REGULAR => "INDEX",
+            IndexType::UNIQUE => "UNIQUE",
+            IndexType::FULLTEXT => "FULLTEXT",
+            IndexType::SPATIAL => "SPATIAL",
+        };
+        $clustered = $index->isClustered() ? "CLUSTERED" : "";
 
-        return "| {$name} | {$columns} | {$type} | {$flags} |\n";
+        return "| {$name} | {$columns} | {$type} | {$clustered} |\n";
     }
 
     /**

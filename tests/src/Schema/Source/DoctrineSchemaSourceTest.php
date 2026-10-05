@@ -83,4 +83,20 @@ final class DoctrineSchemaSourceTest extends TestCase
             "Invoice should have a foreign key to the party table."
         );
     }
+
+    public function testDecimalColumnKeepsPrecisionAndScale(): void
+    {
+        $doctrineSchema = new DoctrineSchema();
+        $doctrineTable = $doctrineSchema->createTable('price');
+        $doctrineTable->addColumn('amount', 'decimal', [
+            'precision' => 10,
+            'scale' => 2,
+        ]);
+
+        $schema = (new DoctrineSchemaSource())->extractSchema($doctrineSchema);
+
+        $column = $schema->getTable('price')->getColumn('amount');
+        $this->assertSame(10, $column->getPrecision());
+        $this->assertSame(2, $column->getScale());
+    }
 }

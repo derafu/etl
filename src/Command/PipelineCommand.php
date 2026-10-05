@@ -42,6 +42,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *   php app/console.php derafu:etl data.xlsx data.sqlite
  *   php app/console.php derafu:etl data.xlsx --drop-tables
  *   php app/console.php derafu:etl data.xlsx --structure-only
+ *
+ * The text of the command (its description, the help of its arguments and
+ * options, and the output) is in English, like the one of the commands of
+ * Symfony: it is a technical tool for whoever administers the application, and
+ * it is not translated.
  */
 #[AsCommand(
     name: 'derafu:etl',

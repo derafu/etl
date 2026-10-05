@@ -15,14 +15,16 @@ namespace Derafu\ETL\Schema\Source;
 use Derafu\ETL\Schema\Column;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaSourceInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
 use Derafu\ETL\Schema\ForeignKey;
 use Derafu\ETL\Schema\Index;
 use Derafu\ETL\Schema\Schema;
 use Derafu\ETL\Schema\Table;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Doctrine\DBAL\Schema\Column as DoctrineColumn;
+use Doctrine\DBAL\Schema\Index\IndexType as DoctrineIndexType;
 use Doctrine\DBAL\Schema\Schema as DoctrineSchema;
 use Doctrine\DBAL\Types\Type as DoctrineType;
-use RuntimeException;
 
 /**
  * Extracts schema information from a Doctrine DBAL Schema object.
@@ -67,9 +69,7 @@ final class DoctrineSchemaSource implements SchemaSourceInterface
                 if ($doctrineColumn->getPrecision() !== null) {
                     $column->setPrecision($doctrineColumn->getPrecision());
 
-                    if ($doctrineColumn->getScale() !== null) {
-                        $column->setScale($doctrineColumn->getScale());
-                    }
+                    $column->setScale($doctrineColumn->getScale());
                 }
 
                 $table->addColumn($column);
@@ -112,13 +112,14 @@ final class DoctrineSchemaSource implements SchemaSourceInterface
                 $index = new Index(
                     $doctrineIndex->getName(),
                     $doctrineIndex->getColumns(),
-                    $doctrineIndex->isUnique()
+                    match ($doctrineIndex->getType()) {
+                        DoctrineIndexType::REGULAR => IndexType::REGULAR,
+                        DoctrineIndexType::UNIQUE => IndexType::UNIQUE,
+                        DoctrineIndexType::FULLTEXT => IndexType::FULLTEXT,
+                        DoctrineIndexType::SPATIAL => IndexType::SPATIAL,
+                    },
+                    $doctrineIndex->isClustered()
                 );
-
-                // Add any available flags.
-                if (method_exists($doctrineIndex, 'getFlags')) {
-                    $index->setFlags($doctrineIndex->getFlags());
-                }
 
                 $table->addIndex($index);
             }

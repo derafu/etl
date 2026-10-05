@@ -42,9 +42,9 @@ abstract class AbstractDatabase implements DatabaseInterface
     /**
      * The database schema.
      *
-     * @var SchemaInterface
+     * @var SchemaInterface|null
      */
-    protected SchemaInterface $schema;
+    protected ?SchemaInterface $schema = null;
 
     /**
      * Constructor.
@@ -79,7 +79,7 @@ abstract class AbstractDatabase implements DatabaseInterface
      */
     public function schema(): SchemaInterface
     {
-        if (!isset($this->schema)) {
+        if ($this->schema === null) {
             $this->schema = $this->createSchema();
         }
 

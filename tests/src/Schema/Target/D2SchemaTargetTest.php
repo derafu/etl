@@ -47,7 +47,6 @@ final class D2SchemaTargetTest extends TestCase
         $d2Output = $schemaTarget->applySchema($schema);
 
         // Verify the output is a non-empty string.
-        $this->assertIsString($d2Output);
         $this->assertNotEmpty($d2Output);
 
         // Verify D2 basic structure.

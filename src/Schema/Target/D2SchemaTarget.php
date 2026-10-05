@@ -16,6 +16,7 @@ use Derafu\ETL\Schema\Contract\ForeignKeyInterface;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
 
 /**
  * Generates a D2 diagram representation of a database schema.
@@ -326,7 +327,12 @@ final class D2SchemaTarget implements SchemaTargetInterface
 
                     foreach ($indexes as $index) {
                         $indexName = $index->getName();
-                        $indexType = $index->isUnique() ? "UNIQUE" : "INDEX";
+                        $indexType = match ($index->getType()) {
+                            IndexType::REGULAR => "INDEX",
+                            IndexType::UNIQUE => "UNIQUE",
+                            IndexType::FULLTEXT => "FULLTEXT",
+                            IndexType::SPATIAL => "SPATIAL",
+                        };
                         $indexColumns = implode(", ", $index->getColumns());
 
                         $output .= "  {$indexName}: {$indexType}({$indexColumns}) idx\n";

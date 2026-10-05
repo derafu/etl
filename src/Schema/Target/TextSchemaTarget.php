@@ -18,6 +18,7 @@ use Derafu\ETL\Schema\Contract\IndexInterface;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
 
 /**
  * Generates a text representation of a database schema.
@@ -166,16 +167,19 @@ final class TextSchemaTarget implements SchemaTargetInterface
      */
     private function processIndex(IndexInterface $index, int $indentLevel): string
     {
-        $type = $index->isUnique() ? 'UNIQUE INDEX' : 'INDEX';
+        $type = match ($index->getType()) {
+            IndexType::REGULAR => 'INDEX',
+            IndexType::UNIQUE => 'UNIQUE INDEX',
+            IndexType::FULLTEXT => 'FULLTEXT INDEX',
+            IndexType::SPATIAL => 'SPATIAL INDEX',
+        };
         $output = $this->indent($indentLevel)
             . "{$index->getName()} ({$type}): "
             . implode(', ', $index->getColumns()) . "\n"
         ;
 
-        if (!empty($index->getFlags())) {
-            $output .= $this->indent($indentLevel + 1)
-                . "FLAGS: " . implode(', ', $index->getFlags()) . "\n"
-            ;
+        if ($index->isClustered()) {
+            $output .= $this->indent($indentLevel + 1) . "CLUSTERED\n";
         }
 
         return $output;

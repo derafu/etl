@@ -17,8 +17,8 @@ use Derafu\ETL\Database\Contract\DatabaseManagerInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Spreadsheet\SpreadsheetFactory;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Doctrine\DBAL\Connection as DoctrineConnection;
-use InvalidArgumentException;
 
 /**
  * Database manager.
@@ -243,28 +243,28 @@ final class DatabaseManager implements DatabaseManagerInterface
         if (!file_exists($file)) {
             // If the file does not exist and creation is disabled, throw an error.
             if (!$options['createIfNotExists']) {
-                throw new InvalidArgumentException(sprintf(
-                    'File does not exist and creation is disabled for this file: %s',
-                    $file
-                ));
+                throw new InvalidArgumentException([
+                    'File does not exist and creation is disabled for this file: {file}',
+                    'file' => $file,
+                ]);
             }
 
             // Check target directory exists or can be created.
             $directory = dirname($file);
             if (!is_dir($directory) && !mkdir($directory, 0755, true)) {
-                throw new InvalidArgumentException(sprintf(
-                    'Target directory does not exist and cannot be created: %s',
-                    $file,
-                ));
+                throw new InvalidArgumentException([
+                    'Target directory does not exist and cannot be created: {file}',
+                    'file' => $file,
+                ]);
             }
 
             // Check if the directory is writable.
             if (!is_writable($directory)) {
-                throw new InvalidArgumentException(sprintf(
-                    'Directory %s is not writable for creating an empty file: %s',
-                    $directory,
-                    basename($file),
-                ));
+                throw new InvalidArgumentException([
+                    'Directory {directory} is not writable for creating an empty file: {file}',
+                    'directory' => $directory,
+                    'file' => basename($file),
+                ]);
             }
 
             // Create an empty file.
@@ -273,18 +273,18 @@ final class DatabaseManager implements DatabaseManagerInterface
 
         // Check file is readable.
         if (!is_readable($file)) {
-            throw new InvalidArgumentException(sprintf(
-                'File is not readable: %s',
-                $file
-            ));
+            throw new InvalidArgumentException([
+                'File is not readable: {file}',
+                'file' => $file,
+            ]);
         }
 
         // Check file is writable if database is not read-only.
         if (!$options['readOnly'] && !is_writable($file)) {
-            throw new InvalidArgumentException(sprintf(
-                'File is not writable: %s',
-                $file
-            ));
+            throw new InvalidArgumentException([
+                'File is not writable: {file}',
+                'file' => $file,
+            ]);
         }
     }
 }

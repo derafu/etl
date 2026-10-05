@@ -164,22 +164,19 @@ final class Pipeline implements PipelineInterface
     {
         if (!isset($this->source)) {
             throw new PipelineException(
-                'Source is not set in the ETL pipeline. ' .
-                'Use the extract() method to set the source.'
+                'Source is not set in the ETL pipeline. Use the extract() method to set the source.'
             );
         }
 
         if (!isset($this->rules)) {
             throw new PipelineException(
-                'Rules are not set in the ETL pipeline. ' .
-                'Use the transform() method to set the rules.'
+                'Rules are not set in the ETL pipeline. Use the transform() method to set the rules.'
             );
         }
 
         if (!isset($this->target)) {
             throw new PipelineException(
-                'Target is not set in the ETL pipeline. ' .
-                'Use the load() method to set the target.'
+                'Target is not set in the ETL pipeline. Use the load() method to set the target.'
             );
         }
     }

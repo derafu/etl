@@ -18,11 +18,15 @@ use Derafu\ETL\Schema\Contract\IndexInterface;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Doctrine\DBAL\Schema\Column as DoctrineColumn;
+use Doctrine\DBAL\Schema\Index as DoctrineIndex;
+use Doctrine\DBAL\Schema\Index\IndexType as DoctrineIndexType;
+use Doctrine\DBAL\Schema\IndexEditor;
 use Doctrine\DBAL\Schema\Schema as DoctrineSchema;
 use Doctrine\DBAL\Schema\Table as DoctrineTable;
 use Doctrine\DBAL\Types\Type as DoctrineType;
-use InvalidArgumentException;
 
 /**
  * Converts a schema to a Doctrine DBAL Schema.
@@ -62,29 +66,25 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
      */
     public function applySchema(SchemaInterface $schema): DoctrineSchema
     {
-        $doctrineSchema = new DoctrineSchema();
-
         // Convert tables.
+        $doctrineTables = [];
         foreach ($schema->getTables() as $table) {
-            $this->addTableToDoctrineSchema($doctrineSchema, $table);
+            $doctrineTables[] = $this->createDoctrineTable($table);
         }
 
-        return $doctrineSchema;
+        return new DoctrineSchema($doctrineTables);
     }
 
     /**
-     * Add a table to the Doctrine schema.
+     * Create a Doctrine table from a table of the schema.
      *
-     * @param DoctrineSchema $doctrineSchema The Doctrine schema.
-     * @param TableInterface $table The table to add.
+     * @param TableInterface $table The table to convert.
      * @return DoctrineTable The created Doctrine table.
      */
-    private function addTableToDoctrineSchema(
-        DoctrineSchema $doctrineSchema,
-        TableInterface $table
-    ): DoctrineTable {
+    private function createDoctrineTable(TableInterface $table): DoctrineTable
+    {
         $tableName = $table->getName();
-        $doctrineTable = $doctrineSchema->createTable($tableName);
+        $doctrineTable = new DoctrineTable($tableName);
 
         // Add columns.
         foreach ($table->getColumns() as $column) {
@@ -104,8 +104,13 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
         }
 
         // Add indexes.
-        foreach ($table->getIndexes() as $index) {
-            $this->addIndexToDoctrineTable($doctrineTable, $index);
+        $indexes = $table->getIndexes();
+        if (!empty($indexes)) {
+            $editor = $doctrineTable->edit();
+            foreach ($indexes as $index) {
+                $editor->addIndex($this->createIndexEditor($index));
+            }
+            $doctrineTable = $editor->create();
         }
 
         return $doctrineTable;
@@ -189,31 +194,30 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
     }
 
     /**
-     * Add an index to a Doctrine table.
+     * Create the Doctrine index editor that describes an index.
      *
-     * @param DoctrineTable $doctrineTable The Doctrine table.
-     * @param IndexInterface $index The index to add.
-     * @return DoctrineTable The created Doctrine index.
+     * @param IndexInterface $index The index to describe.
+     * @return IndexEditor
      */
-    private function addIndexToDoctrineTable(
-        DoctrineTable $doctrineTable,
-        IndexInterface $index
-    ): DoctrineTable {
-        $name = $index->getName();
+    private function createIndexEditor(IndexInterface $index): IndexEditor
+    {
         $columns = $index->getColumns();
 
         if (empty($columns)) {
             throw new InvalidArgumentException('Index must have columns.');
         }
 
-        $isUnique = $index->isUnique();
-        $flags = $index->getFlags();
-
-        if ($isUnique) {
-            return $doctrineTable->addUniqueIndex($columns, $name, $flags);
-        } else {
-            return $doctrineTable->addIndex($columns, $name, $flags);
-        }
+        return DoctrineIndex::editor()
+            ->setUnquotedName($index->getName())
+            ->setType(match ($index->getType()) {
+                IndexType::REGULAR => DoctrineIndexType::REGULAR,
+                IndexType::UNIQUE => DoctrineIndexType::UNIQUE,
+                IndexType::FULLTEXT => DoctrineIndexType::FULLTEXT,
+                IndexType::SPATIAL => DoctrineIndexType::SPATIAL,
+            })
+            ->setUnquotedColumnNames(...$columns)
+            ->setIsClustered($index->isClustered())
+        ;
     }
 
     /**

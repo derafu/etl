@@ -28,22 +28,24 @@
         "php": "^8.5",
         "derafu/translation": "dev-main",
         "derafu/spreadsheet": "dev-main",
-        "phpoffice/phpspreadsheet": "^5.4",
-        "doctrine/dbal": "^4.4",
-        "symfony/console": "^8.0"
+        "phpoffice/phpspreadsheet": "^5.10",
+        "doctrine/dbal": "^4.5",
+        "symfony/console": "^8.1"
     },
     "require-dev": {
         "ext-xdebug": "*",
-        "friendsofphp/php-cs-fixer": "^3.94",
-        "phpstan/phpstan": "^1.12",
-        "phpunit/phpunit": "^11.5"
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.2",
+        "phpunit/phpunit": "^13.4",
+        "nikic/php-parser": "^5.9"
     },
     "suggest": {
         "doctrine/dbal": "Required for working with databases using Doctrine DBAL.",
         "derafu/spreadsheet": "Required for working with spreadsheets as sources or targets.",
         "phpoffice/phpspreadsheet": "Required for working with spreadsheets in XLSX, XLSX or ODS formats.",
         "symfony/yaml": "Required for working with spreadsheets in YAML format.",
-        "symfony/console": "Required for the command line interface (eg. derafu:etl)."
+        "symfony/console": "Required for the command line interface (eg. derafu:etl).",
+        "nikic/php-parser": "Required by the tests of the messages of the package (Derafu\\Translation\\Lint reads the code)."
     },
     "scripts": {
         "docs": "php tools/phpdocumentor run --config=phpdoc.xml",

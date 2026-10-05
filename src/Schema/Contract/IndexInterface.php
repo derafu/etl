@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\ETL\Schema\Contract;
 
+use Derafu\ETL\Schema\Enum\IndexType;
+
 /**
  * Index represents a database index within a table.
  *
@@ -58,25 +60,32 @@ interface IndexInterface
     public function isUnique(): bool;
 
     /**
-     * Set whether this index is unique.
+     * Get the index type.
      *
-     * @param bool $unique Whether the index is unique.
-     * @return self
+     * @return IndexType The index type.
      */
-    public function setUnique(bool $unique): self;
+    public function getType(): IndexType;
 
     /**
-     * Get the index flags (fulltext, etc.).
+     * Set the index type.
      *
-     * @return string[] Array of flags.
-     */
-    public function getFlags(): array;
-
-    /**
-     * Set the index flags.
-     *
-     * @param string[] $flags Array of flags.
+     * @param IndexType $type The index type.
      * @return self
      */
-    public function setFlags(array $flags): self;
+    public function setType(IndexType $type): self;
+
+    /**
+     * Check if the index is clustered.
+     *
+     * @return bool True if the index is clustered, false otherwise.
+     */
+    public function isClustered(): bool;
+
+    /**
+     * Set whether this index is clustered.
+     *
+     * @param bool $clustered Whether the index is clustered.
+     * @return self
+     */
+    public function setClustered(bool $clustered): self;
 }

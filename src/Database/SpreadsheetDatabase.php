@@ -23,7 +23,7 @@ use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetLoaderInterface;
 use Derafu\Spreadsheet\SpreadsheetDumper;
 use Derafu\Spreadsheet\SpreadsheetLoader;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Database implementation for spreadsheets.
@@ -127,7 +127,7 @@ final class SpreadsheetDatabase extends AbstractDatabase implements DatabaseInte
     ): int {
         $rowsLoaded = parent::load($source, $options);
 
-        unset($this->schema);
+        $this->schema = null;
 
         return $rowsLoaded;
     }

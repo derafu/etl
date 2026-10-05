@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\ETL\Schema;
 
 use Derafu\ETL\Schema\Contract\IndexInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
 
 /**
  * Implementation of a database index.
@@ -34,37 +35,37 @@ final class Index implements IndexInterface
     private array $columns = [];
 
     /**
-     * Whether the index is unique.
+     * The type of the index.
+     *
+     * @var IndexType
+     */
+    private IndexType $type;
+
+    /**
+     * Whether the index is clustered.
      *
      * @var bool
      */
-    private bool $unique = false;
-
-    /**
-     * Additional flags for the index.
-     *
-     * @var string[]
-     */
-    private array $flags = [];
+    private bool $clustered;
 
     /**
      * Constructor.
      *
      * @param string $name The index name.
      * @param string[] $columns The column names.
-     * @param bool $unique Whether the index is unique.
-     * @param string[] $flags Additional flags for the index.
+     * @param IndexType $type The index type.
+     * @param bool $clustered Whether the index is clustered.
      */
     public function __construct(
         string $name,
         array $columns = [],
-        bool $unique = false,
-        array $flags = []
+        IndexType $type = IndexType::REGULAR,
+        bool $clustered = false
     ) {
         $this->name = $name;
         $this->columns = $columns;
-        $this->unique = $unique;
-        $this->flags = $flags;
+        $this->type = $type;
+        $this->clustered = $clustered;
     }
 
     /**
@@ -106,17 +107,17 @@ final class Index implements IndexInterface
     /**
      * {@inheritDoc}
      */
-    public function isUnique(): bool
+    public function getType(): IndexType
     {
-        return $this->unique;
+        return $this->type;
     }
 
     /**
      * {@inheritDoc}
      */
-    public function setUnique(bool $unique): self
+    public function setType(IndexType $type): self
     {
-        $this->unique = $unique;
+        $this->type = $type;
 
         return $this;
     }
@@ -124,17 +125,25 @@ final class Index implements IndexInterface
     /**
      * {@inheritDoc}
      */
-    public function getFlags(): array
+    public function isUnique(): bool
     {
-        return $this->flags;
+        return $this->type === IndexType::UNIQUE;
     }
 
     /**
      * {@inheritDoc}
      */
-    public function setFlags(array $flags): self
+    public function isClustered(): bool
     {
-        $this->flags = $flags;
+        return $this->clustered;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function setClustered(bool $clustered): self
+    {
+        $this->clustered = $clustered;
 
         return $this;
     }

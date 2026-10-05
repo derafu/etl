@@ -19,6 +19,7 @@ use Derafu\ETL\Schema\Source\DoctrineSchemaSource;
 use Derafu\ETL\Schema\Target\DoctrineSchemaTarget;
 use Derafu\ETL\Schema\Target\SpreadsheetSchemaTarget;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Doctrine\DBAL\Connection as DoctrineConnection;
 use Doctrine\DBAL\DriverManager as DoctrineDriverManager;
 use Doctrine\DBAL\Platforms\MySQLPlatform;
@@ -27,7 +28,6 @@ use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Schema\AbstractSchemaManager as DoctrineAbstractSchemaManager;
 use Doctrine\DBAL\Schema\Comparator as DoctrineComparator;
 use Doctrine\DBAL\Schema\Schema as DoctrineSchema;
-use RuntimeException;
 
 /**
  * Database implementation for Doctrine DBAL connections.
@@ -372,9 +372,9 @@ final class DoctrineDatabase extends AbstractDatabase implements DatabaseInterfa
         }
 
         // If the platform is not supported, throw an exception.
-        throw new RuntimeException(sprintf(
-            'Unsupported database platform: %s.',
-            $platform
-        ));
+        throw new RuntimeException([
+            'Unsupported database platform: {platform}.',
+            'platform' => $platform,
+        ]);
     }
 }

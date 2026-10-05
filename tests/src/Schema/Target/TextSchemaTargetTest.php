@@ -47,7 +47,6 @@ final class TextSchemaTargetTest extends TestCase
         $textOutput = $schemaTarget->applySchema($schema);
 
         // Verify the output is a non-empty string.
-        $this->assertIsString($textOutput);
         $this->assertNotEmpty($textOutput);
 
         // Verify that the text contains the expected table names.

@@ -15,14 +15,15 @@ namespace Derafu\ETL\Schema\Source;
 use Derafu\ETL\Schema\Column;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaSourceInterface;
+use Derafu\ETL\Schema\Enum\IndexType;
 use Derafu\ETL\Schema\ForeignKey;
 use Derafu\ETL\Schema\Index;
 use Derafu\ETL\Schema\Schema;
 use Derafu\ETL\Schema\Table;
 use Derafu\Spreadsheet\Contract\SheetInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
-use InvalidArgumentException;
-use RuntimeException;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Extracts schema information from a Derafu Spreadsheet.
@@ -212,10 +213,10 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
         foreach ($groupedRows['column'] as $columnRow) {
             $nameParts = explode('.', $columnRow['name']);
             if (count($nameParts) !== 2) {
-                throw new RuntimeException(sprintf(
-                    'Invalid column name format: "%s". Must be in the format "table.column".',
-                    $columnRow['name']
-                ));
+                throw new RuntimeException([
+                    'Invalid column name format: "{name}". Must be in the format "table.column".',
+                    'name' => $columnRow['name'],
+                ]);
             }
 
             $tableName = $nameParts[0];
@@ -223,10 +224,10 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $properties = $columnRow['properties'];
 
             if (!$schema->hasTable($tableName)) {
-                throw new RuntimeException(sprintf(
-                    'Table "%s" not found in schema sheet.',
-                    $tableName
-                ));
+                throw new RuntimeException([
+                    'Table "{table}" not found in schema sheet.',
+                    'table' => $tableName,
+                ]);
             }
 
             $table = $schema->getTable($tableName);
@@ -263,10 +264,10 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
         foreach ($groupedRows['index'] as $indexRow) {
             $nameParts = explode('.', $indexRow['name']);
             if (count($nameParts) !== 2) {
-                throw new RuntimeException(sprintf(
-                    'Invalid index name format: "%s". Must be in the format "table.index".',
-                    $indexRow['name']
-                ));
+                throw new RuntimeException([
+                    'Invalid index name format: "{name}". Must be in the format "table.index".',
+                    'name' => $indexRow['name'],
+                ]);
             }
 
             $tableName = $nameParts[0];
@@ -274,40 +275,37 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $properties = $indexRow['properties'];
 
             if (!$schema->hasTable($tableName)) {
-                throw new RuntimeException(sprintf(
-                    'Table "%s" not found in schema sheet.',
-                    $tableName
-                ));
+                throw new RuntimeException([
+                    'Table "{table}" not found in schema sheet.',
+                    'table' => $tableName,
+                ]);
             }
 
             $table = $schema->getTable($tableName);
 
             if (!isset($properties['columns']) || !is_array($properties['columns'])) {
-                throw new RuntimeException(sprintf(
-                    'Missing columns for index "%s" in table "%s".',
-                    $indexName,
-                    $tableName
-                ));
+                throw new RuntimeException([
+                    'Missing columns for index "{index}" in table "{table}".',
+                    'index' => $indexName,
+                    'table' => $tableName,
+                ]);
             }
 
-            $index = new Index(
+            $table->addIndex($this->createIndex(
                 $indexName,
-                $properties['columns'],
-                $properties['unique'] ?? false,
-                $properties['flags'] ?? []
-            );
-
-            $table->addIndex($index);
+                $tableName,
+                $properties
+            ));
         }
 
         // Process foreign keys.
         foreach ($groupedRows['foreign_key'] as $fkRow) {
             $nameParts = explode('.', $fkRow['name']);
             if (count($nameParts) !== 2) {
-                throw new RuntimeException(sprintf(
-                    'Invalid foreign key name format: "%s". Must be in the format "table.foreign_key".',
-                    $fkRow['name']
-                ));
+                throw new RuntimeException([
+                    'Invalid foreign key name format: "{name}". Must be in the format "table.foreign_key".',
+                    'name' => $fkRow['name'],
+                ]);
             }
 
             $tableName = $nameParts[0];
@@ -315,10 +313,10 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $properties = $fkRow['properties'];
 
             if (!$schema->hasTable($tableName)) {
-                throw new RuntimeException(sprintf(
-                    'Table "%s" not found in schema sheet.',
-                    $tableName
-                ));
+                throw new RuntimeException([
+                    'Table "{table}" not found in schema sheet.',
+                    'table' => $tableName,
+                ]);
             }
 
             $table = $schema->getTable($tableName);
@@ -328,11 +326,11 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
                 || !isset($properties['foreign_table'])
                 || !is_array($properties['foreign_columns'] ?? null)
             ) {
-                throw new RuntimeException(sprintf(
-                    'Missing required properties for foreign key "%s" in table "%s".',
-                    $fkName,
-                    $tableName
-                ));
+                throw new RuntimeException([
+                    'Missing required properties for foreign key "{foreign_key}" in table "{table}".',
+                    'foreign_key' => $fkName,
+                    'table' => $tableName,
+                ]);
             }
 
             $foreignKey = new ForeignKey(
@@ -352,5 +350,56 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
 
             $table->addForeignKey($foreignKey);
         }
+    }
+
+    /**
+     * Create an index from the properties of a row of the schema sheet.
+     *
+     * Besides the current format (`type` and `clustered`) it reads the legacy
+     * one (`unique` and `flags`), so spreadsheets generated by previous
+     * versions can still be loaded.
+     *
+     * @param string $indexName The index name.
+     * @param string $tableName The table name.
+     * @param array $properties The properties of the index row.
+     * @return Index
+     */
+    private function createIndex(
+        string $indexName,
+        string $tableName,
+        array $properties
+    ): Index {
+        $type = IndexType::REGULAR;
+        $clustered = (bool) ($properties['clustered'] ?? false);
+
+        if (isset($properties['type'])) {
+            $type = IndexType::tryFrom((string) $properties['type'])
+                ?? throw new RuntimeException([
+                    'Invalid type "{type}" for index "{index}" in table "{table}".',
+                    'type' => $properties['type'],
+                    'index' => $indexName,
+                    'table' => $tableName,
+                ])
+            ;
+        } elseif ($properties['unique'] ?? false) {
+            $type = IndexType::UNIQUE;
+        }
+
+        foreach ($properties['flags'] ?? [] as $flag) {
+            if ($flag === 'clustered') {
+                $clustered = true;
+            } elseif (in_array($flag, ['fulltext', 'spatial'], true)) {
+                $type = IndexType::from($flag);
+            } else {
+                throw new RuntimeException([
+                    'Unsupported flag "{flag}" for index "{index}" in table "{table}".',
+                    'flag' => $flag,
+                    'index' => $indexName,
+                    'table' => $tableName,
+                ]);
+            }
+        }
+
+        return new Index($indexName, $properties['columns'], $type, $clustered);
     }
 }
