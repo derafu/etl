@@ -40,11 +40,7 @@
         "nikic/php-parser": "^5.9"
     },
     "suggest": {
-        "doctrine/dbal": "Required for working with databases using Doctrine DBAL.",
-        "derafu/spreadsheet": "Required for working with spreadsheets as sources or targets.",
-        "phpoffice/phpspreadsheet": "Required for working with spreadsheets in XLSX, XLSX or ODS formats.",
         "symfony/yaml": "Required for working with spreadsheets in YAML format.",
-        "symfony/console": "Required for the command line interface (eg. derafu:etl).",
         "nikic/php-parser": "Required by the tests of the messages of the package (Derafu\\Translation\\Lint reads the code)."
     },
     "scripts": {
