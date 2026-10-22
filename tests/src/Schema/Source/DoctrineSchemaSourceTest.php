@@ -95,7 +95,10 @@ final class DoctrineSchemaSourceTest extends TestCase
 
         $schema = (new DoctrineSchemaSource())->extractSchema($doctrineSchema);
 
-        $column = $schema->getTable('price')->getColumn('amount');
+        $table = $schema->getTable('price');
+        $this->assertNotNull($table);
+        $column = $table->getColumn('amount');
+        $this->assertNotNull($column);
         $this->assertSame(10, $column->getPrecision());
         $this->assertSame(2, $column->getScale());
     }

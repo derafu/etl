@@ -20,6 +20,10 @@ use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
 use Derafu\ETL\Schema\Enum\IndexType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Schema\Column as DoctrineColumn;
 use Doctrine\DBAL\Schema\Index as DoctrineIndex;
 use Doctrine\DBAL\Schema\Index\IndexType as DoctrineIndexType;
@@ -52,7 +56,7 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
     /**
      * Constructor.
      */
-    public function __construct()
+    public function __construct(private readonly ?AbstractPlatform $platform = null)
     {
         $doctrineTypes = DoctrineType::getTypesMap();
 
@@ -85,6 +89,12 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
     {
         $tableName = $table->getName();
         $doctrineTable = new DoctrineTable($tableName);
+        $engine = $this->platformName();
+        if ($engine !== null) {
+            foreach ($table->getPlatformOptions()[$engine] ?? [] as $name => $value) {
+                $doctrineTable->addOption($name, $value);
+            }
+        }
 
         // Add columns.
         foreach ($table->getColumns() as $column) {
@@ -94,7 +104,7 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
         // Add primary key.
         $primaryKey = $table->getPrimaryKey();
         if (!empty($primaryKey)) {
-            $doctrineTable->setPrimaryKey($primaryKey);
+            $doctrineTable->setPrimaryKey($this->columnNames($primaryKey));
         }
 
         // Add foreign keys.
@@ -150,6 +160,10 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
             }
         }
 
+        $engine = $this->platformName();
+        if ($engine !== null) {
+            $options['platformOptions'] = $column->getPlatformOptions()[$engine] ?? [];
+        }
         $doctrineTable->addColumn($name, $type, $options);
 
         return $doctrineTable->getColumn($name);
@@ -166,7 +180,9 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
         DoctrineTable $doctrineTable,
         ForeignKeyInterface $foreignKey
     ): DoctrineTable {
-        if (empty($foreignKey->getLocalColumns()) || empty($foreignKey->getForeignColumns())) {
+        $localColumns = $foreignKey->getLocalColumns();
+        $foreignColumns = $foreignKey->getForeignColumns();
+        if ($localColumns === [] || $foreignColumns === []) {
             throw new InvalidArgumentException(
                 'Foreign key must have local and foreign columns.'
             );
@@ -186,8 +202,8 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
 
         return $doctrineTable->addForeignKeyConstraint(
             $foreignKey->getForeignTableName(),
-            $foreignKey->getLocalColumns(),
-            $foreignKey->getForeignColumns(),
+            $this->columnNames($localColumns),
+            $this->columnNames($foreignColumns),
             $options,
             $name
         );
@@ -202,20 +218,24 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
     private function createIndexEditor(IndexInterface $index): IndexEditor
     {
         $columns = $index->getColumns();
+        $name = $index->getName();
+        if ($name === '') {
+            throw new InvalidArgumentException('Index name must not be empty.');
+        }
 
         if (empty($columns)) {
             throw new InvalidArgumentException('Index must have columns.');
         }
 
         return DoctrineIndex::editor()
-            ->setUnquotedName($index->getName())
+            ->setUnquotedName($name)
             ->setType(match ($index->getType()) {
                 IndexType::REGULAR => DoctrineIndexType::REGULAR,
                 IndexType::UNIQUE => DoctrineIndexType::UNIQUE,
                 IndexType::FULLTEXT => DoctrineIndexType::FULLTEXT,
                 IndexType::SPATIAL => DoctrineIndexType::SPATIAL,
             })
-            ->setUnquotedColumnNames(...$columns)
+            ->setUnquotedColumnNames(...$this->columnNames($columns))
             ->setIsClustered($index->isClustered())
         ;
     }
@@ -231,5 +251,34 @@ final class DoctrineSchemaTarget implements SchemaTargetInterface
         $lowerType = strtolower($type);
 
         return $this->typeMap[$lowerType] ?? 'string';
+    }
+
+    /**
+     * @param non-empty-array<array-key, mixed> $columns
+     * @return non-empty-list<non-empty-string>
+     */
+    private function columnNames(array $columns): array
+    {
+        return array_values(array_map($this->columnName(...), $columns));
+    }
+
+    /** @return non-empty-string */
+    private function columnName(mixed $column): string
+    {
+        if (!is_string($column) || $column === '') {
+            throw new InvalidArgumentException('Schema column names must be non-empty strings.');
+        }
+
+        return $column;
+    }
+
+    private function platformName(): ?string
+    {
+        return match (true) {
+            $this->platform instanceof AbstractMySQLPlatform => 'mysql',
+            $this->platform instanceof PostgreSQLPlatform => 'postgresql',
+            $this->platform instanceof SQLitePlatform => 'sqlite',
+            default => null,
+        };
     }
 }

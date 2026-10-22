@@ -127,4 +127,20 @@ interface TableInterface
      * @return bool True if index exists, false otherwise.
      */
     public function hasIndex(string $name): bool;
+
+    /**
+     * Engine-specific text settings. Missing values are unspecified.
+     *
+     * @return array<non-empty-string, array{charset?: non-empty-string, collation?: non-empty-string}>
+     */
+    public function getPlatformOptions(): array;
+
+    /**
+     * Replace engine-specific charset/collation metadata, without casting.
+     * Null values mean unspecified and are omitted from stored metadata.
+     *
+     * @param array<array-key, mixed> $options
+     * @return self
+     */
+    public function setPlatformOptions(array $options): self;
 }

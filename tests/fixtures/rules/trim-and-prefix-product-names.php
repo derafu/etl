@@ -1,0 +1,19 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Derafu: ETL - From Spreadsheets to Databases Seamlessly.
+ *
+ * Copyright (c) 2026 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
+ * Licensed under the MIT License.
+ * See LICENSE file for more details.
+ */
+
+use Derafu\TestsETL\Fixture\PrefixProductNames;
+use Derafu\TestsETL\Fixture\TrimProductNames;
+
+return [
+    'trim' => new TrimProductNames(),
+    'prefix' => (new PrefixProductNames())->transform(...),
+];

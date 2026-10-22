@@ -39,7 +39,7 @@ interface DataTargetInterface
      * Load the given data rows to the specified table.
      *
      * @param string $table The name of the table to insert/update data in.
-     * @param array $rows An array representing rows of data.
+     * @param array<array-key, mixed> $rows An array representing rows of data.
      * @return int Number of affected rows.
      */
     public function load(string $table, array $rows): int;

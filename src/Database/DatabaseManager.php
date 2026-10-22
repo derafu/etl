@@ -14,8 +14,12 @@ namespace Derafu\ETL\Database;
 
 use Derafu\ETL\Database\Contract\DatabaseInterface;
 use Derafu\ETL\Database\Contract\DatabaseManagerInterface;
+use Derafu\ETL\Schema\Schema;
+use Derafu\ETL\Schema\Target\SpreadsheetSchemaTarget;
 use Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
+use Derafu\Spreadsheet\SpreadsheetCaster;
+use Derafu\Spreadsheet\SpreadsheetDumper;
 use Derafu\Spreadsheet\SpreadsheetFactory;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Doctrine\DBAL\Connection as DoctrineConnection;
@@ -110,8 +114,8 @@ final class DatabaseManager implements DatabaseManagerInterface
     /**
      * Resolve the options.
      *
-     * @param array $options The options for the database (not only connection).
-     * @return array The resolved options.
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
+     * @return array<array-key, mixed> The resolved options.
      */
     private function resolveOptions(array $options): array
     {
@@ -149,12 +153,19 @@ final class DatabaseManager implements DatabaseManagerInterface
     /**
      * Connect to a Doctrine connection.
      *
-     * @param array $options The options for the database (not only connection).
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
      * @return DatabaseInterface The database representation.
      */
     private function connectToDoctrine(array $options): DatabaseInterface
     {
         $doctrine = $options['doctrine'];
+        if (!$doctrine instanceof DoctrineConnection && !is_array($doctrine) && !is_string($doctrine)) {
+            throw new InvalidArgumentException([
+                'Option "{option}" must be a Doctrine connection, an array or a string; {type} given.',
+                'option' => 'doctrine',
+                'type' => get_debug_type($doctrine),
+            ]);
+        }
 
         return new DoctrineDatabase($doctrine, $options);
     }
@@ -164,19 +175,42 @@ final class DatabaseManager implements DatabaseManagerInterface
      *
      * The file must be valid for the spreadsheet format handler.
      *
-     * @param array $options The options for the database (not only connection).
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
      * @return DatabaseInterface The database representation.
      */
     private function connectToFile(array $options): DatabaseInterface
     {
-        $file = $options['file'];
-        $format = $options['format'] ?? pathinfo($file, PATHINFO_EXTENSION);
+        $file = $this->requireString($options['file'], 'file');
+        $format = $this->requireString($options['format'] ?? pathinfo($file, PATHINFO_EXTENSION), 'format');
 
+        $exists = file_exists($file);
         $this->validateFile($file, $options);
 
         $handler = $this->spreadsheetFactory->createFormatHandler($file, $format);
 
-        $options['spreadsheet'] = $handler->loadFromFile($file);
+        if ($exists) {
+            $options['spreadsheet'] = $handler->loadFromFile($file);
+            // Serialized schema properties need the central caster when a
+            // document is reopened. Keep business-cell values unchanged here.
+            $metadata = $options['spreadsheet']->getSheet('__schema');
+            if ($metadata !== null) {
+                $schemaDocument = $this->spreadsheetFactory->create();
+                $schemaDocument->addSheet($metadata->toAssociative());
+                $schemaDocument = (new SpreadsheetCaster())->castAfterLoad($schemaDocument);
+                foreach ($schemaDocument->getSheets() as $sheet) {
+                    $options['spreadsheet']->addSheet($sheet);
+                }
+            }
+        } else {
+            // Let the format handler create a valid document, rather than
+            // writing an empty string and attempting to parse it as that format.
+            // XLSX requires a sheet: an empty ETL schema is meaningful metadata,
+            // not a placeholder business table, and remains after data is loaded.
+            $options['spreadsheet'] = $format === 'xlsx'
+                ? (new SpreadsheetSchemaTarget())->applySchema(new Schema())
+                : $this->spreadsheetFactory->create();
+            (new SpreadsheetDumper($this->spreadsheetFactory))->dumpToFile($options['spreadsheet'], $file, $format);
+        }
 
         return $this->connectToSpreadsheet($options);
     }
@@ -187,17 +221,19 @@ final class DatabaseManager implements DatabaseManagerInterface
      * The data must be valid for the spreadsheet format handler. And the
      * format must be provided in the $options['format'] key.
      *
-     * @param array $options The options for the database (not only connection).
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
      * @return DatabaseInterface The database representation.
      */
     private function connectToData(array $options): DatabaseInterface
     {
-        $data = $options['data'];
+        $data = $this->requireString($options['data'], 'data');
         $format = $options['format']
             ?? throw new InvalidArgumentException(
                 'Format is required for data connection.'
             )
         ;
+
+        $format = $this->requireString($format, 'format');
 
         $handler = $this->spreadsheetFactory->createFormatHandler(
             'dummy.' . $format,
@@ -212,7 +248,7 @@ final class DatabaseManager implements DatabaseManagerInterface
     /**
      * Connect to a spreadsheet.
      *
-     * @param array $options The options for the database (not only connection).
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
      * @return DatabaseInterface The database representation.
      */
     private function connectToSpreadsheet(array $options): DatabaseInterface
@@ -220,6 +256,14 @@ final class DatabaseManager implements DatabaseManagerInterface
         $spreadsheet = $options['spreadsheet']
             ?? $this->spreadsheetFactory->create()
         ;
+
+        if (!$spreadsheet instanceof SpreadsheetInterface) {
+            throw new InvalidArgumentException([
+                'Option "{option}" must be a SpreadsheetInterface instance; {type} given.',
+                'option' => 'spreadsheet',
+                'type' => get_debug_type($spreadsheet),
+            ]);
+        }
 
         unset($options['spreadsheet']);
 
@@ -229,13 +273,13 @@ final class DatabaseManager implements DatabaseManagerInterface
     /**
      * Validate the file.
      *
-     * If the file does not exist, it will be created if the
-     * $options['createIfNotExists'] option is true.
+     * If creation is allowed for a missing file, prepare its directory. The
+     * caller creates the document using its format handler.
      *
      * If the file exists, it will be checked if it is readable and writable.
      *
      * @param string $file The file to validate.
-     * @param array $options The options for the database (not only connection).
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
      */
     private function validateFile(string $file, array $options): void
     {
@@ -267,8 +311,7 @@ final class DatabaseManager implements DatabaseManagerInterface
                 ]);
             }
 
-            // Create an empty file.
-            file_put_contents($file, '');
+            return;
         }
 
         // Check file is readable.
@@ -286,5 +329,18 @@ final class DatabaseManager implements DatabaseManagerInterface
                 'file' => $file,
             ]);
         }
+    }
+
+    private function requireString(mixed $value, string $option): string
+    {
+        if (!is_string($value)) {
+            throw new InvalidArgumentException([
+                'Option "{option}" must be a string; {type} given.',
+                'option' => $option,
+                'type' => get_debug_type($value),
+            ]);
+        }
+
+        return $value;
     }
 }

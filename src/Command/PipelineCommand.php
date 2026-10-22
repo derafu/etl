@@ -14,7 +14,11 @@ namespace Derafu\ETL\Command;
 
 use Derafu\ETL\Pipeline\Contract\PipelineInterface;
 use Derafu\ETL\Pipeline\Pipeline;
+use Derafu\ETL\Transform\Contract\DataRulesInterface;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Exception;
+use JsonException;
+use Stringable;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -22,6 +26,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Throwable;
 
 /**
  * Command to extract, transform and load data from a source to a target.
@@ -37,9 +42,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *     data is available in each sheet.
  *   - Additional sheets containing the data for each table.
  *
+ * The optional --rules PHP file returns an ordered array of DataRulesInterface
+ * instances or callables accepting and returning the table data array. Rules
+ * transform values; schema synchronization still uses the source schema.
+ *
  * Example usage with the behavior described above:
  *
  *   php app/console.php derafu:etl data.xlsx data.sqlite
+ *   php app/console.php derafu:etl data.xlsx data.sqlite --rules=rules.php
  *   php app/console.php derafu:etl data.xlsx --drop-tables
  *   php app/console.php derafu:etl data.xlsx --structure-only
  *
@@ -69,6 +79,12 @@ final class PipelineCommand extends Command
                 'target',
                 InputArgument::OPTIONAL,
                 'Target database (default: source name with .sqlite extension).'
+            )
+            ->addOption(
+                'rules',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'PHP file returning an ordered array of transformation rules.'
             )
             ->addOption(
                 'no-confirm',
@@ -125,7 +141,7 @@ final class PipelineCommand extends Command
                 'Transform',
                 $key,
                 get_debug_type($value),
-                $this->formatValue($value),
+                is_string($value) ? $value : get_debug_type($value),
             ];
         }
         foreach ($target as $key => $value) {
@@ -174,11 +190,11 @@ final class PipelineCommand extends Command
      * Get the source database options.
      *
      * @param InputInterface $input The input interface.
-     * @return array The source options.
+     * @return array<array-key, mixed> The source options.
      */
     private function getSource(InputInterface $input): array
     {
-        $file = $input->getArgument('source');
+        $file = $this->requirePath($input->getArgument('source'), 'source');
 
         $options = [
             'file' => $file,
@@ -194,14 +210,16 @@ final class PipelineCommand extends Command
      * Get the target database options.
      *
      * @param InputInterface $input The input interface.
-     * @return array The target options.
+     * @return array<array-key, mixed> The target options.
      */
     private function getTarget(InputInterface $input): array
     {
         $file = $input->getArgument('target');
         if (empty($file)) {
-            $file = pathinfo($input->getArgument('source'), PATHINFO_FILENAME) . '.sqlite';
+            $file = pathinfo($this->requirePath($input->getArgument('source'), 'source'), PATHINFO_FILENAME) . '.sqlite';
         }
+
+        $file = $this->requirePath($file, 'target');
 
         $options = [
             'file' => $file,
@@ -217,15 +235,50 @@ final class PipelineCommand extends Command
      * Get the transformer for manipulating the source data.
      *
      * @param InputInterface $input The input interface.
-     * @return array The transformer.
+     * @return array<array-key, DataRulesInterface|callable> The ordered transformation rules.
      */
     private function getTransformer(InputInterface $input): array
     {
-        $options = [];
+        $file = $input->getOption('rules');
+        if ($file === null) {
+            return [];
+        }
+        $file = $this->requirePath($file, 'rules');
+        $path = realpath($file);
+        if ($path === false || !is_file($path) || !is_readable($path)) {
+            throw new InvalidArgumentException([
+                'Rules file must exist and be readable: {file}',
+                'file' => $file,
+            ]);
+        }
+        try {
+            $rules = (static fn (string $path): mixed => require $path)($path);
+        } catch (Throwable $exception) {
+            throw new InvalidArgumentException([
+                'Could not load rules file "{file}": {error}.',
+                'file' => $file,
+                'error' => $exception->getMessage(),
+            ], $exception->getCode(), $exception);
+        }
+        if (!is_array($rules)) {
+            throw new InvalidArgumentException([
+                'Rules file must return an array; {type} given.',
+                'type' => get_debug_type($rules),
+            ]);
+        }
+        $validated = [];
+        foreach ($rules as $key => $rule) {
+            if (!$rule instanceof DataRulesInterface && !is_callable($rule)) {
+                throw new InvalidArgumentException([
+                    'Rule "{rule}" must implement DataRulesInterface or be callable; {type} given.',
+                    'rule' => $key,
+                    'type' => get_debug_type($rule),
+                ]);
+            }
+            $validated[$key] = $rule;
+        }
 
-        // TODO: Define the transformer options.
-
-        return $options;
+        return $validated;
     }
 
     /**
@@ -237,13 +290,40 @@ final class PipelineCommand extends Command
     private function formatValue(mixed $value): string
     {
         if (is_array($value)) {
-            return json_encode($value);
+            try {
+                return json_encode($value, JSON_THROW_ON_ERROR);
+            } catch (JsonException $exception) {
+                throw new InvalidArgumentException([
+                    'Could not encode option value as JSON: {error}.',
+                    'error' => $exception->getMessage(),
+                ], $exception->getCode(), $exception);
+            }
         }
 
         if (is_bool($value)) {
             return $value ? 'true' : 'false';
         }
 
-        return (string) $value;
+        if ($value === null || is_scalar($value) || $value instanceof Stringable) {
+            return (string) $value;
+        }
+
+        throw new InvalidArgumentException([
+            'Unsupported option value type: {type}.',
+            'type' => get_debug_type($value),
+        ]);
+    }
+
+    private function requirePath(mixed $value, string $argument): string
+    {
+        if (!is_string($value)) {
+            throw new InvalidArgumentException([
+                'Argument "{argument}" must be a string; {type} given.',
+                'argument' => $argument,
+                'type' => get_debug_type($value),
+            ]);
+        }
+
+        return $value;
     }
 }

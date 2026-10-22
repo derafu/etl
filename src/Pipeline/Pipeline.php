@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\ETL\Pipeline;
 
 use Derafu\ETL\Database\Contract\DatabaseInterface;
+use Derafu\ETL\Database\Contract\TransactionalDatabaseInterface;
 use Derafu\ETL\Extract\Contract\DataExtractorInterface;
 use Derafu\ETL\Extract\Contract\DataSourceInterface;
 use Derafu\ETL\Extract\DataExtractor;
@@ -131,13 +132,18 @@ final class Pipeline implements PipelineInterface
             $data = $this->transformer->transform($data, $this->rules);
         }
 
-        // Sync the target with the source.
-        if ($options['sync'] ?? true) {
-            $this->target->sync($this->source, $options);
-        }
+        $synchronize = $options['sync'] ?? true;
+        $operation = function () use ($options, $data, $synchronize): int {
+            if ($synchronize) {
+                $this->target->sync($this->source, $options);
+            }
 
-        // Load the data from the source into the target.
-        $rowsLoaded = $this->loader->load($this->target, $data);
+            return $this->loader->load($this->target, $data);
+        };
+        $database = $this->target->database();
+        $rowsLoaded = $database instanceof TransactionalDatabaseInterface
+            ? $database->transactional($operation, $synchronize ? $this->source->database() : null)
+            : $operation();
 
         // Return the result.
         return new PipelineResult($this->target, $rowsLoaded);

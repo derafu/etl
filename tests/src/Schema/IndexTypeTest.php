@@ -69,7 +69,9 @@ final class IndexTypeTest extends TestCase
     private function indexSummary(SchemaInterface $schema): array
     {
         $summary = [];
-        foreach ($schema->getTable('doc')->getIndexes() as $index) {
+        $table = $schema->getTable('doc');
+        $this->assertNotNull($table);
+        foreach ($table->getIndexes() as $index) {
             $summary[$index->getName()] = [$index->getType(), $index->isClustered()];
         }
         ksort($summary);
@@ -128,6 +130,7 @@ final class IndexTypeTest extends TestCase
         return [
             'regular' => [['unique' => false, 'flags' => []], IndexType::REGULAR, false],
             'unique' => [['unique' => true, 'flags' => []], IndexType::UNIQUE, false],
+            'null type keeps legacy unique' => [['type' => null, 'unique' => true, 'flags' => []], IndexType::UNIQUE, false],
             'clustered flag' => [['unique' => false, 'flags' => ['clustered']], IndexType::REGULAR, true],
             'fulltext flag' => [['unique' => false, 'flags' => ['fulltext']], IndexType::FULLTEXT, false],
             'spatial flag' => [['unique' => false, 'flags' => ['spatial']], IndexType::SPATIAL, false],
@@ -146,7 +149,9 @@ final class IndexTypeTest extends TestCase
     ): void {
         $schema = $this->extractWithIndexProperties(['columns' => ['code']] + $legacy);
 
-        $index = $schema->getTable('doc')->getIndex('ix');
+        $table = $schema->getTable('doc');
+        $this->assertNotNull($table);
+        $index = $table->getIndex('ix');
         $this->assertNotNull($index);
         $this->assertSame($type, $index->getType());
         $this->assertSame($clustered, $index->isClustered());
@@ -207,7 +212,11 @@ final class IndexTypeTest extends TestCase
             JSON_THROW_ON_ERROR
         );
 
+        $this->assertIsArray($data);
+        $this->assertArrayHasKey('__schema', $data);
+        $this->assertIsArray($data['__schema']);
         foreach ($data['__schema'] as &$row) {
+            $this->assertIsArray($row);
             if ($row['type'] === 'index') {
                 $row['properties'] = $properties;
             }

@@ -21,6 +21,11 @@ use Derafu\ETL\Schema\Index;
 use Derafu\ETL\Schema\Schema;
 use Derafu\ETL\Schema\Table;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Schema\Column as DoctrineColumn;
 use Doctrine\DBAL\Schema\Index\IndexType as DoctrineIndexType;
 use Doctrine\DBAL\Schema\Schema as DoctrineSchema;
@@ -31,6 +36,10 @@ use Doctrine\DBAL\Types\Type as DoctrineType;
  */
 final class DoctrineSchemaSource implements SchemaSourceInterface
 {
+    public function __construct(private readonly ?AbstractPlatform $platform = null)
+    {
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -47,6 +56,13 @@ final class DoctrineSchemaSource implements SchemaSourceInterface
         // Extract each table.
         foreach ($source->getTables() as $doctrineTable) {
             $table = new Table($doctrineTable->getName());
+            $engine = $this->platformName();
+            if ($engine === 'mysql') {
+                $table->setPlatformOptions([$engine => [
+                    'charset' => $doctrineTable->getOption('charset'),
+                    'collation' => $doctrineTable->getOption('collation'),
+                ]]);
+            }
 
             // Extract columns.
             foreach ($doctrineTable->getColumns() as $doctrineColumn) {
@@ -72,6 +88,12 @@ final class DoctrineSchemaSource implements SchemaSourceInterface
                     $column->setScale($doctrineColumn->getScale());
                 }
 
+                if ($engine !== null) {
+                    $column->setPlatformOptions([$engine => [
+                        'charset' => $doctrineColumn->getCharset(),
+                        'collation' => $doctrineColumn->getCollation(),
+                    ]]);
+                }
                 $table->addColumn($column);
             }
 
@@ -92,11 +114,27 @@ final class DoctrineSchemaSource implements SchemaSourceInterface
 
                 // Set onDelete and onUpdate if defined.
                 if ($doctrineFk->hasOption('onDelete')) {
-                    $foreignKey->setOnDelete($doctrineFk->getOption('onDelete'));
+                    $action = $doctrineFk->getOption('onDelete');
+                    if ($action !== null && !is_string($action)) {
+                        throw new InvalidArgumentException([
+                            'Schema field "{field}" must be a string; {type} given.',
+                            'field' => 'onDelete',
+                            'type' => get_debug_type($action),
+                        ]);
+                    }
+                    $foreignKey->setOnDelete($action);
                 }
 
                 if ($doctrineFk->hasOption('onUpdate')) {
-                    $foreignKey->setOnUpdate($doctrineFk->getOption('onUpdate'));
+                    $action = $doctrineFk->getOption('onUpdate');
+                    if ($action !== null && !is_string($action)) {
+                        throw new InvalidArgumentException([
+                            'Schema field "{field}" must be a string; {type} given.',
+                            'field' => 'onUpdate',
+                            'type' => get_debug_type($action),
+                        ]);
+                    }
+                    $foreignKey->setOnUpdate($action);
                 }
 
                 $table->addForeignKey($foreignKey);
@@ -147,5 +185,15 @@ final class DoctrineSchemaSource implements SchemaSourceInterface
             $shortName = substr($className, strrpos($className, '\\') + 1);
             return strtolower(str_replace('Type', '', $shortName));
         }
+    }
+
+    private function platformName(): ?string
+    {
+        return match (true) {
+            $this->platform instanceof AbstractMySQLPlatform => 'mysql',
+            $this->platform instanceof PostgreSQLPlatform => 'postgresql',
+            $this->platform instanceof SQLitePlatform => 'sqlite',
+            default => null,
+        };
     }
 }

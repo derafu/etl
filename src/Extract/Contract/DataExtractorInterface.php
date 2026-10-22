@@ -30,7 +30,7 @@ interface DataExtractorInterface
      *   - array: A configuration array.
      *   - string: A path to a file of a spreadsheet.
      *
-     * @param DatabaseInterface|SpreadsheetInterface|array|string $source
+     * @param DatabaseInterface|SpreadsheetInterface|array<array-key, mixed>|string $source
      * @return DataSourceInterface
      */
     public function createSource(

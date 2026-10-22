@@ -20,6 +20,8 @@ use InvalidArgumentException;
 
 /**
  * Abstract database class.
+ *
+ * @template TConnection
  */
 abstract class AbstractDatabase implements DatabaseInterface
 {
@@ -28,14 +30,14 @@ abstract class AbstractDatabase implements DatabaseInterface
      *
      * Example: PDO instance, SpreadsheetInterface instance, etc.
      *
-     * @var mixed
+     * @var TConnection
      */
     protected mixed $connection;
 
     /**
      * The database options.
      *
-     * @var array
+     * @var array<array-key, mixed>
      */
     protected array $options;
 
@@ -49,8 +51,8 @@ abstract class AbstractDatabase implements DatabaseInterface
     /**
      * Constructor.
      *
-     * @param mixed $connection The database connection.
-     * @param array $options The database options.
+     * @param TConnection $connection The database connection.
+     * @param array<array-key, mixed> $options The database options.
      */
     public function __construct(mixed $connection, array $options)
     {
@@ -60,6 +62,8 @@ abstract class AbstractDatabase implements DatabaseInterface
 
     /**
      * {@inheritDoc}
+     *
+     * @return TConnection
      */
     public function connection(): mixed
     {
@@ -163,7 +167,7 @@ abstract class AbstractDatabase implements DatabaseInterface
      * Load data from a dump according to the database type.
      *
      * @param string $source The source dump.
-     * @param array $options The options for the load operation.
+     * @param array<array-key, mixed> $options The options for the load operation.
      * @return int The number of rows loaded.
      * @throws InvalidArgumentException If the source is not a valid dump.
      */
@@ -175,8 +179,8 @@ abstract class AbstractDatabase implements DatabaseInterface
     /**
      * Load data from an array.
      *
-     * @param array $source The source array.
-     * @param array $options The options for the load operation.
+     * @param array<array-key, mixed> $source The source array.
+     * @param array<array-key, mixed> $options The options for the load operation.
      * @return int The number of rows loaded.
      */
     abstract protected function loadFromArray(
@@ -188,7 +192,7 @@ abstract class AbstractDatabase implements DatabaseInterface
      * Load data from a database.
      *
      * @param DatabaseInterface $source The source database.
-     * @param array $options The options for the load operation.
+     * @param array<array-key, mixed> $options The options for the load operation.
      * @return int The number of rows loaded.
      */
     abstract protected function loadFromDatabase(

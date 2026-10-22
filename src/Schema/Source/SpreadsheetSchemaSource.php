@@ -53,8 +53,9 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
         }
 
         // If the schema sheet exists, process it.
-        if ($spreadsheet->hasSheet($this->schemaSheetName)) {
-            return $this->processSchema($spreadsheet);
+        $schemaSheet = $spreadsheet->getSheet($this->schemaSheetName);
+        if ($schemaSheet !== null) {
+            return $this->processSchema($schemaSheet);
         }
 
         // Otherwise, guess the schema.
@@ -66,14 +67,11 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
     /**
      * Process the schema from the schema sheet.
      *
-     * @param SpreadsheetInterface $spreadsheet The spreadsheet.
+     * @param SheetInterface $schemaSheet The schema sheet.
      * @return SchemaInterface The schema.
      */
-    private function processSchema(SpreadsheetInterface $spreadsheet): SchemaInterface
+    private function processSchema(SheetInterface $schemaSheet): SchemaInterface
     {
-        // Get schema sheet.
-        $schemaSheet = $spreadsheet->getSheet($this->schemaSheetName);
-
         // Create a new schema.
         $schema = new Schema();
 
@@ -120,7 +118,7 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
 
             foreach ($columnNames as $columnName) {
                 $column = new Column(
-                    $columnName,
+                    (string) $columnName,
                     $columnTypes[$columnName] ?? 'string'
                 );
                 $table->addColumn($column);
@@ -145,6 +143,13 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
     private function guessColumnType(mixed $value): string
     {
         // TODO: Implement this method correctly.
+        // IDEA under development, not an approved or final design: infer types
+        // from all non-null values in a column, using their existing PHP types
+        // without parsing strings or casting values (casting belongs to Caster).
+        // Consider string as a fallback for empty or incompatible mixed columns;
+        // the integer/float combination still needs a policy. Share inference
+        // with array-created tables and preserve explicit schemas and key rules.
+        // Agree on the policy and add real regression tests before implementing.
 
         return 'string';
     }
@@ -163,8 +168,9 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
 
         foreach ($rows as $row) {
             if ($row['type'] === 'metadata' && $row['name'] === 'schema') {
-                if (isset($row['properties']['name'])) {
-                    $schema->setName($row['properties']['name']);
+                $properties = $this->requireArray($row['properties'] ?? [], 'metadata.properties');
+                if (isset($properties['name'])) {
+                    $schema->setName($this->requireString($properties['name'], 'metadata.name'));
                 }
             }
         }
@@ -192,18 +198,23 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
 
         // Group rows by type.
         foreach ($rows as $row) {
-            if (isset($groupedRows[$row['type']])) {
-                $groupedRows[$row['type']][] = $row;
+            $type = $this->requireString($row['type'] ?? null, 'row.type');
+            if (isset($groupedRows[$type])) {
+                $groupedRows[$type][] = [
+                    'name' => $this->requireString($row['name'] ?? null, $type . '.name'),
+                    'properties' => $this->requireArray($row['properties'] ?? [], $type . '.properties'),
+                ];
             }
         }
 
         // Process tables first.
         foreach ($groupedRows['table'] as $tableRow) {
             $table = new Table($tableRow['name']);
+            $table->setPlatformOptions($this->requireArray($tableRow['properties']['platform_options'] ?? [], 'table.platform_options'));
 
             // Set primary key if available.
-            if (is_array($tableRow['properties']['primary_key'] ?? null)) {
-                $table->setPrimaryKey($tableRow['properties']['primary_key']);
+            if (isset($tableRow['properties']['primary_key'])) {
+                $table->setPrimaryKey($this->requireStringArray($tableRow['properties']['primary_key'], 'table.primary_key'));
             }
 
             $schema->addTable($table);
@@ -223,31 +234,32 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $columnName = $nameParts[1];
             $properties = $columnRow['properties'];
 
-            if (!$schema->hasTable($tableName)) {
+            $table = $schema->getTable($tableName);
+            if ($table === null) {
                 throw new RuntimeException([
                     'Table "{table}" not found in schema sheet.',
                     'table' => $tableName,
                 ]);
             }
 
-            $table = $schema->getTable($tableName);
+            $column = new Column($columnName, $this->requireString($properties['type'] ?? 'string', 'column.type'));
 
-            $column = new Column($columnName, $properties['type'] ?? 'string');
+            $column->setPlatformOptions($this->requireArray($properties['platform_options'] ?? [], 'column.platform_options'));
 
             // Set nullable property.
-            $column->setNullable($properties['nullable'] ?? true);
+            $column->setNullable($this->requireBool($properties['nullable'] ?? true, 'column.nullable'));
 
             // Set length property.
             if (isset($properties['length'])) {
-                $column->setLength($properties['length']);
+                $column->setLength($this->requireInt($properties['length'], 'column.length'));
             }
 
             // Set precision property.
             if (isset($properties['precision'])) {
-                $column->setPrecision($properties['precision']);
+                $column->setPrecision($this->requireInt($properties['precision'], 'column.precision'));
 
                 if (isset($properties['scale'])) {
-                    $column->setScale($properties['scale']);
+                    $column->setScale($this->requireInt($properties['scale'], 'column.scale'));
                 }
             }
 
@@ -274,14 +286,13 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $indexName = $nameParts[1];
             $properties = $indexRow['properties'];
 
-            if (!$schema->hasTable($tableName)) {
+            $table = $schema->getTable($tableName);
+            if ($table === null) {
                 throw new RuntimeException([
                     'Table "{table}" not found in schema sheet.',
                     'table' => $tableName,
                 ]);
             }
-
-            $table = $schema->getTable($tableName);
 
             if (!isset($properties['columns']) || !is_array($properties['columns'])) {
                 throw new RuntimeException([
@@ -312,14 +323,13 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $fkName = $nameParts[1];
             $properties = $fkRow['properties'];
 
-            if (!$schema->hasTable($tableName)) {
+            $table = $schema->getTable($tableName);
+            if ($table === null) {
                 throw new RuntimeException([
                     'Table "{table}" not found in schema sheet.',
                     'table' => $tableName,
                 ]);
             }
-
-            $table = $schema->getTable($tableName);
 
             if (
                 !is_array($properties['local_columns'] ?? null)
@@ -334,18 +344,18 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             }
 
             $foreignKey = new ForeignKey(
-                $properties['foreign_table'],
-                $properties['local_columns'],
-                $properties['foreign_columns'],
+                $this->requireString($properties['foreign_table'], 'foreign_key.foreign_table'),
+                $this->requireStringArray($properties['local_columns'], 'foreign_key.local_columns'),
+                $this->requireStringArray($properties['foreign_columns'], 'foreign_key.foreign_columns'),
                 $fkName
             );
 
             if (isset($properties['on_delete'])) {
-                $foreignKey->setOnDelete($properties['on_delete']);
+                $foreignKey->setOnDelete($this->requireString($properties['on_delete'], 'foreign_key.on_delete'));
             }
 
             if (isset($properties['on_update'])) {
-                $foreignKey->setOnUpdate($properties['on_update']);
+                $foreignKey->setOnUpdate($this->requireString($properties['on_update'], 'foreign_key.on_update'));
             }
 
             $table->addForeignKey($foreignKey);
@@ -361,7 +371,7 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
      *
      * @param string $indexName The index name.
      * @param string $tableName The table name.
-     * @param array $properties The properties of the index row.
+     * @param array<array-key, mixed> $properties The properties of the index row.
      * @return Index
      */
     private function createIndex(
@@ -373,7 +383,7 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
         $clustered = (bool) ($properties['clustered'] ?? false);
 
         if (isset($properties['type'])) {
-            $type = IndexType::tryFrom((string) $properties['type'])
+            $type = IndexType::tryFrom($this->requireString($properties['type'], 'index.type'))
                 ?? throw new RuntimeException([
                     'Invalid type "{type}" for index "{index}" in table "{table}".',
                     'type' => $properties['type'],
@@ -385,7 +395,7 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             $type = IndexType::UNIQUE;
         }
 
-        foreach ($properties['flags'] ?? [] as $flag) {
+        foreach ($this->requireArray($properties['flags'] ?? [], 'index.flags') as $flag) {
             if ($flag === 'clustered') {
                 $clustered = true;
             } elseif (in_array($flag, ['fulltext', 'spatial'], true)) {
@@ -400,6 +410,71 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             }
         }
 
-        return new Index($indexName, $properties['columns'], $type, $clustered);
+        return new Index($indexName, $this->requireStringArray($properties['columns'], 'index.columns'), $type, $clustered);
+    }
+
+    private function requireString(mixed $value, string $field): string
+    {
+        if (!is_string($value)) {
+            throw new RuntimeException([
+                'Schema field "{field}" must be a string; {type} given.',
+                'field' => $field,
+                'type' => get_debug_type($value),
+            ]);
+        }
+
+        return $value;
+    }
+
+    private function requireInt(mixed $value, string $field): int
+    {
+        if (!is_int($value)) {
+            throw new RuntimeException([
+                'Schema field "{field}" must be an integer; {type} given.',
+                'field' => $field,
+                'type' => get_debug_type($value),
+            ]);
+        }
+
+        return $value;
+    }
+
+    private function requireBool(mixed $value, string $field): bool
+    {
+        if (!is_bool($value)) {
+            throw new RuntimeException([
+                'Schema field "{field}" must be a boolean; {type} given.',
+                'field' => $field,
+                'type' => get_debug_type($value),
+            ]);
+        }
+
+        return $value;
+    }
+
+    /** @return array<array-key, mixed> */
+    private function requireArray(mixed $value, string $field): array
+    {
+        if (!is_array($value)) {
+            throw new RuntimeException([
+                'Schema field "{field}" must be an array; {type} given.',
+                'field' => $field,
+                'type' => get_debug_type($value),
+            ]);
+        }
+
+        return $value;
+    }
+
+    /** @return array<array-key, string> */
+    private function requireStringArray(mixed $value, string $field): array
+    {
+        $values = $this->requireArray($value, $field);
+        $validated = [];
+        foreach ($values as $key => $item) {
+            $validated[$key] = $this->requireString($item, $field);
+        }
+
+        return $validated;
     }
 }

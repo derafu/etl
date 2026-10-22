@@ -42,8 +42,8 @@ interface DatabaseManagerInterface
      *     - dropTables: Whether to drop the tables before creating them.
      *     - dropData: Whether to drop the data before populating the database.
      *
-     * @param SpreadsheetInterface|array|string $connection The connection.
-     * @param array $options The options for the database (not only connection).
+     * @param DoctrineConnection|SpreadsheetInterface|array<array-key, mixed>|string $connection The connection.
+     * @param array<array-key, mixed> $options The options for the database (not only connection).
      * @return DatabaseInterface The database representation.
      */
     public function connect(

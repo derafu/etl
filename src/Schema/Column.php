@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\ETL\Schema;
 
 use Derafu\ETL\Schema\Contract\ColumnInterface;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Implementation of a database column.
@@ -25,6 +26,9 @@ final class Column implements ColumnInterface
      * @var string
      */
     private string $name;
+
+    /** @var array<non-empty-string, array{charset?: non-empty-string, collation?: non-empty-string}> */
+    private array $platformOptions = [];
 
     /**
      * The type of the column.
@@ -202,6 +206,48 @@ final class Column implements ColumnInterface
     public function setScale(?int $scale): self
     {
         $this->scale = $scale;
+
+        return $this;
+    }
+
+    /** {@inheritDoc} */
+    public function getPlatformOptions(): array
+    {
+        return $this->platformOptions;
+    }
+
+    /** {@inheritDoc} */
+    public function setPlatformOptions(array $options): self
+    {
+        $validated = [];
+        foreach ($options as $engine => $settings) {
+            if (!is_string($engine) || $engine === '' || !is_array($settings)) {
+                throw new InvalidArgumentException('Platform text options must map non-empty engine names to arrays.');
+            }
+            foreach ($settings as $name => $value) {
+                if ($name !== 'charset' && $name !== 'collation') {
+                    throw new InvalidArgumentException([
+                        'Unsupported platform text option "{option}".',
+                        'option' => (string) $name,
+                    ]);
+                }
+                if ($value !== null && (!is_string($value) || $value === '')) {
+                    throw new InvalidArgumentException([
+                        'Platform text option "{field}" must be a non-empty string or null.',
+                        'field' => $engine . '.' . $name,
+                    ]);
+                }
+                if ($value !== null) {
+                    $validated[$engine][$name] = $value;
+                }
+            }
+        }
+        ksort($validated);
+        foreach ($validated as &$settings) {
+            ksort($settings);
+        }
+        unset($settings);
+        $this->platformOptions = $validated;
 
         return $this;
     }

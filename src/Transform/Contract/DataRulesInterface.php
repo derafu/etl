@@ -20,8 +20,8 @@ interface DataRulesInterface
     /**
      * Transform the data.
      *
-     * @param array $data The data to transform.
-     * @return array The transformed data.
+     * @param array<array-key, mixed> $data The data to transform.
+     * @return array<array-key, mixed> The transformed data.
      */
     public function transform(array $data): array;
 }

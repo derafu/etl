@@ -33,7 +33,7 @@ interface DataSourceInterface
      * Extract data from the source for a specific table.
      *
      * @param string $table The name of the table to extract data for.
-     * @return array An array representing rows of data.
+     * @return array<array-key, mixed> An array representing rows of data.
      */
     public function extractTableData(string $table): array;
 

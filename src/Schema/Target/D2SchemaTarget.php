@@ -109,18 +109,18 @@ final class D2SchemaTarget implements SchemaTargetInterface
     /**
      * Table filter.
      *
-     * @var array|null
+     * @var array<array-key, string>|null
      */
     private ?array $tableFilter;
 
     /**
      * Constructor.
      *
-     * @param string $detailLevel Level of detail to include (one of the DETAIL_* constants).
-     * @param string $direction Direction of the diagram (one of the DIRECTION_* constants).
-     * @param string $layout Layout style to use (one of the LAYOUT_* constants).
+     * @param self::DETAIL_* $detailLevel Level of detail to include (one of the DETAIL_* constants).
+     * @param self::DIRECTION_* $direction Direction of the diagram (one of the DIRECTION_* constants).
+     * @param self::LAYOUT_* $layout Layout style to use (one of the LAYOUT_* constants).
      * @param bool $includeIndexes Whether to include indexes in the diagram.
-     * @param array|null $tableFilter Array of table names to include, or null for all tables.
+     * @param array<array-key, string>|null $tableFilter Array of table names to include, or null for all tables.
      */
     public function __construct(
         string $detailLevel = self::DETAIL_FULL,
@@ -384,8 +384,8 @@ final class D2SchemaTarget implements SchemaTargetInterface
      * This is a simple implementation that groups tables based on naming patterns.
      * A more sophisticated implementation would analyze foreign key relationships.
      *
-     * @param array $tables Array of TableInterface objects.
-     * @return array Associative array of cluster name => array of table names.
+     * @param array<array-key, TableInterface> $tables Array of TableInterface objects.
+     * @return array<string, list<string>> Associative array of cluster name => array of table names.
      */
     private function identifyClusters(array $tables): array
     {

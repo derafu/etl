@@ -224,6 +224,7 @@ final class SqliteSchemaTargetTest extends TestCase
 
             // Verify that tables were created.
             $stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+            $this->assertNotFalse($stmt);
             $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
             // sqlite_master and sqlite_sequence are system tables.

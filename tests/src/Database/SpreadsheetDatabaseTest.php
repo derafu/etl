@@ -20,8 +20,10 @@ use Derafu\ETL\Schema\Index;
 use Derafu\ETL\Schema\Schema;
 use Derafu\ETL\Schema\Source\SpreadsheetSchemaSource;
 use Derafu\ETL\Schema\Table;
+use Derafu\ETL\Schema\Target\SpreadsheetSchemaTarget;
 use Derafu\Spreadsheet\SpreadsheetLoader;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SpreadsheetDatabase::class)]
@@ -32,6 +34,7 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(Column::class)]
 #[CoversClass(ForeignKey::class)]
 #[CoversClass(Index::class)]
+#[UsesClass(SpreadsheetSchemaTarget::class)]
 final class SpreadsheetDatabaseTest extends TestCase
 {
     private function createDatabase(): SpreadsheetDatabase

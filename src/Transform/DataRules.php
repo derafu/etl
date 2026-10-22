@@ -23,7 +23,7 @@ final class DataRules implements DataRulesInterface
     /**
      * Constructor.
      *
-     * @param array $rules The rules.
+     * @param array<array-key, mixed> $rules The rules.
      */
     public function __construct(private readonly array $rules)
     {

@@ -19,6 +19,8 @@ use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
 use Derafu\ETL\Schema\Enum\IndexType;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Stringable;
 
 /**
  * Generates a Markdown representation of a database schema.
@@ -155,10 +157,22 @@ final class MarkdownSchemaTarget implements SchemaTargetInterface
         if (!$column->isNullable()) {
             $attributes[] = "NOT NULL";
         }
-        if ($column->getDefault() !== null) {
-            $default = $column->getDefault();
+        $default = $column->getDefault();
+        if ($default !== null) {
+            if ($default instanceof Stringable) {
+                $default = (string) $default;
+            }
+            if (!is_scalar($default) || (is_float($default) && !is_finite($default))) {
+                throw new InvalidArgumentException([
+                    'Default value for column "{column}" must be a string, a finite number, a boolean or Stringable; {type} given.',
+                    'column' => $column->getName(),
+                    'type' => get_debug_type($default),
+                ]);
+            }
             if (is_string($default)) {
                 $default = "'{$default}'";
+            } elseif (is_bool($default)) {
+                $default = $default ? 'true' : 'false';
             }
             $attributes[] = "DEFAULT: {$default}";
         }

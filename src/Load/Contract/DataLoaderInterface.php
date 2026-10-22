@@ -14,6 +14,7 @@ namespace Derafu\ETL\Load\Contract;
 
 use Derafu\ETL\Database\Contract\DatabaseInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * DataLoaderInterface is the interface for the DataLoader class.
@@ -30,7 +31,7 @@ interface DataLoaderInterface
      *   - array: A configuration array.
      *   - string: A path to a file of a spreadsheet.
      *
-     * @param DatabaseInterface|SpreadsheetInterface|array|string $target The target.
+     * @param DatabaseInterface|SpreadsheetInterface|array<array-key, mixed>|string $target The target.
      * @return DataTargetInterface The target.
      */
     public function createTarget(
@@ -41,8 +42,9 @@ interface DataLoaderInterface
      * Load the data into the target.
      *
      * @param DataTargetInterface $target The target.
-     * @param array<string,array<string,mixed>> $data The data to load.
+     * @param array<array-key, mixed> $data Raw table names mapped to row collections.
      * @return int The number of rows loaded.
+     * @throws InvalidArgumentException If a table name is empty or its rows are not an array.
      */
     public function load(DataTargetInterface $target, array $data): int;
 }

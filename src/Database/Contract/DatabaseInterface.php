@@ -14,6 +14,8 @@ namespace Derafu\ETL\Database\Contract;
 
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Database interface.
@@ -36,7 +38,7 @@ interface DatabaseInterface
      *
      * This are the options of the database, not only for the connection.
      *
-     * @return array The options.
+     * @return array<array-key, mixed> The options.
      */
     public function options(): array;
 
@@ -53,7 +55,7 @@ interface DatabaseInterface
     /**
      * Dump the database.
      *
-     * @param array $options The options for the dump.
+     * @param array<array-key, mixed> $options The options for the dump.
      * @return string The dump.
      */
     public function dump(array $options = []): string;
@@ -62,7 +64,7 @@ interface DatabaseInterface
      * Save the database.
      *
      * @param string $file The file.
-     * @param array $options The options for the save.
+     * @param array<array-key, mixed> $options The options for the save.
      * @return string The file.
      */
     public function save(string $file, array $options = []): string;
@@ -70,15 +72,15 @@ interface DatabaseInterface
     /**
      * Get the data of the database.
      *
-     * @param array $options The options for the data.
-     * @return array<string, array<string, mixed>> The data.
+     * @param array<array-key, mixed> $options The options for the data.
+     * @return array<array-key, array<array-key, mixed>> Rows of the selected table, or table names mapped to their rows.
      */
     public function data(array $options = []): array;
 
     /**
      * Convert the database to a spreadsheet.
      *
-     * @param array $options The options for the conversion.
+     * @param array<array-key, mixed> $options The options for the conversion.
      * @return SpreadsheetInterface The spreadsheet.
      */
     public function spreadsheet(array $options = []): SpreadsheetInterface;
@@ -87,7 +89,7 @@ interface DatabaseInterface
      * Sync the database with another database.
      *
      * @param DatabaseInterface $source The source database.
-     * @param array $options The options for the sync.
+     * @param array<array-key, mixed> $options The options for the sync.
      * @return self The synced database.
      */
     public function sync(
@@ -101,13 +103,18 @@ interface DatabaseInterface
      * $source can be:
      *
      *   - string: dump of a database of the same type of the current database.
-     *   - array: a list of tables with their data.
+     *   - array: raw tables and rows, validated by the target database before loading.
      *   - SpreadsheetInterface: a spreadsheet.
      *   - DatabaseInterface: another database.
      *
-     * @param string|array<string, array<string, mixed>>|SpreadsheetInterface|DatabaseInterface $source The source.
-     * @param array $options The options for the load.
-     * @return int The number of rows loaded.
+     * @param string|array<array-key, mixed>|SpreadsheetInterface|DatabaseInterface $source The source.
+     * @param array<array-key, mixed> $options The options for the load.
+     * @return int The affected-row count, kept as int for consistency with the
+     * pipeline API. Doctrine driver counts represented as strings must fit the
+     * PHP integer range (PHP_INT_MAX is 9223372036854775807 on 64-bit PHP).
+     * @throws RuntimeException If a driver count or its sum cannot be represented
+     * as a PHP integer, instead of truncating it or returning a float.
+     * @throws InvalidArgumentException If the source contains invalid tables or rows.
      */
     public function load(
         string|array|SpreadsheetInterface|DatabaseInterface $source,

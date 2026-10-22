@@ -157,6 +157,8 @@ final class SpreadsheetSchemaRoundTripTest extends TestCase
 
     /**
      * Helper method to get table names from a Doctrine Schema.
+     *
+     * @return list<string>
      */
     private function getTableNames(DoctrineSchema $schema): array
     {
@@ -169,6 +171,8 @@ final class SpreadsheetSchemaRoundTripTest extends TestCase
 
     /**
      * Helper method to get column names from a Doctrine Table.
+     *
+     * @return list<string>
      */
     private function getColumnNames(DoctrineTable $table): array
     {

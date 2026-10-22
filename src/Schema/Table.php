@@ -16,6 +16,7 @@ use Derafu\ETL\Schema\Contract\ColumnInterface;
 use Derafu\ETL\Schema\Contract\ForeignKeyInterface;
 use Derafu\ETL\Schema\Contract\IndexInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Implementation of a database table.
@@ -28,6 +29,9 @@ final class Table implements TableInterface
      * @var string
      */
     private string $name;
+
+    /** @var array<non-empty-string, array{charset?: non-empty-string, collation?: non-empty-string}> */
+    private array $platformOptions = [];
 
     /**
      * The columns of the table.
@@ -187,5 +191,47 @@ final class Table implements TableInterface
     public function hasIndex(string $name): bool
     {
         return isset($this->indexes[$name]);
+    }
+
+    /** {@inheritDoc} */
+    public function getPlatformOptions(): array
+    {
+        return $this->platformOptions;
+    }
+
+    /** {@inheritDoc} */
+    public function setPlatformOptions(array $options): self
+    {
+        $validated = [];
+        foreach ($options as $engine => $settings) {
+            if (!is_string($engine) || $engine === '' || !is_array($settings)) {
+                throw new InvalidArgumentException('Platform text options must map non-empty engine names to arrays.');
+            }
+            foreach ($settings as $name => $value) {
+                if ($name !== 'charset' && $name !== 'collation') {
+                    throw new InvalidArgumentException([
+                        'Unsupported platform text option "{option}".',
+                        'option' => (string) $name,
+                    ]);
+                }
+                if ($value !== null && (!is_string($value) || $value === '')) {
+                    throw new InvalidArgumentException([
+                        'Platform text option "{field}" must be a non-empty string or null.',
+                        'field' => $engine . '.' . $name,
+                    ]);
+                }
+                if ($value !== null) {
+                    $validated[$engine][$name] = $value;
+                }
+            }
+        }
+        ksort($validated);
+        foreach ($validated as &$settings) {
+            ksort($settings);
+        }
+        unset($settings);
+        $this->platformOptions = $validated;
+
+        return $this;
     }
 }

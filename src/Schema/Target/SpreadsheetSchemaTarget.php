@@ -95,13 +95,16 @@ class SpreadsheetSchemaTarget implements SchemaTargetInterface
     ): void {
         $tableName = $table->getName();
 
+        $properties = ['primary_key' => $table->getPrimaryKey()];
+        if ($table->getPlatformOptions() !== []) {
+            $properties['platform_options'] = $table->getPlatformOptions();
+        }
+
         // Add table entry.
         $schemaSheet->addRow([
             'type' => 'table',
             'name' => $tableName,
-            'properties' => [
-                'primary_key' => $table->getPrimaryKey(),
-            ],
+            'properties' => $properties,
         ]);
 
         // Add columns.
@@ -136,6 +139,10 @@ class SpreadsheetSchemaTarget implements SchemaTargetInterface
             'type' => $column->getType(),
             'nullable' => $column->isNullable(),
         ];
+
+        if ($column->getPlatformOptions() !== []) {
+            $properties['platform_options'] = $column->getPlatformOptions();
+        }
 
         // Add optional properties if set.
         if ($column->getLength() !== null) {

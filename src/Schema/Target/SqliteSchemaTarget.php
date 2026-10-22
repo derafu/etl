@@ -18,6 +18,8 @@ use Derafu\ETL\Schema\Contract\IndexInterface;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Stringable;
 
 /**
  * Generates SQLite SQL statements for a database schema.
@@ -134,9 +136,9 @@ final class SqliteSchemaTarget implements SchemaTargetInterface
     /**
      * Perform a topological sort on a dependency graph.
      *
-     * @param array $graph Dependency graph where keys are nodes and values are
+     * @param array<string, list<string>> $graph Dependency graph where keys are nodes and values are
      * arrays of dependencies.
-     * @return array Sorted node names.
+     * @return list<string> Sorted node names.
      */
     private function topologicalSort(array $graph): array
     {
@@ -164,10 +166,10 @@ final class SqliteSchemaTarget implements SchemaTargetInterface
      * Helper function for topological sort.
      *
      * @param string $node Current node.
-     * @param array $graph Dependency graph.
-     * @param array &$visited Visited nodes.
-     * @param array &$temp Temporary mark for cycle detection.
-     * @param array &$result Resulting sort.
+     * @param array<string, list<string>> $graph Dependency graph.
+     * @param array<string, true> &$visited Visited nodes.
+     * @param array<string, true> &$temp Temporary mark for cycle detection.
+     * @param list<string> &$result Resulting sort.
      */
     private function topologicalSortVisit(
         string $node,
@@ -281,6 +283,10 @@ final class SqliteSchemaTarget implements SchemaTargetInterface
         $type = $this->mapColumnTypeToSqlite($column);
 
         $definition = "`{$name}` {$type}";
+        $collation = $column->getPlatformOptions()['sqlite']['collation'] ?? null;
+        if ($collation !== null) {
+            $definition .= ' COLLATE "' . str_replace('"', '""', $collation) . '"';
+        }
 
         // Add NOT NULL constraint if needed.
         if (!$column->isNullable()) {
@@ -294,8 +300,18 @@ final class SqliteSchemaTarget implements SchemaTargetInterface
         }
 
         // Add DEFAULT value if defined.
-        if ($column->getDefault() !== null) {
-            $default = $column->getDefault();
+        $default = $column->getDefault();
+        if ($default !== null) {
+            if ($default instanceof Stringable) {
+                $default = (string) $default;
+            }
+            if (!is_scalar($default) || (is_float($default) && !is_finite($default))) {
+                throw new InvalidArgumentException([
+                    'Default value for column "{column}" must be a string, a finite number, a boolean or Stringable; {type} given.',
+                    'column' => $column->getName(),
+                    'type' => get_debug_type($default),
+                ]);
+            }
             if (is_string($default)) {
                 $default = "'" . str_replace("'", "''", $default) . "'";
             } elseif (is_bool($default)) {
