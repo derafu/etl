@@ -37,7 +37,9 @@
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.3",
         "phpunit/phpunit": "^13.4",
-        "nikic/php-parser": "^5.9"
+        "nikic/php-parser": "^5.9",
+        "symfony/dependency-injection": "^8.1",
+        "symfony/config": "^8.1"
     },
     "suggest": {
         "symfony/yaml": "Required for working with spreadsheets in YAML format.",
