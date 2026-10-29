@@ -4,12 +4,51 @@
 #   imports:
 #       - { resource: '../vendor/derafu/etl/resources/config/etl-services.yaml' }
 
+# Reuse Spreadsheet's shared factory, caster, loader and dumper.
+imports:
+    - { resource: '../../../spreadsheet/resources/config/spreadsheet-services.yaml' }
+
 services:
 
     _defaults:
         autowire: true
         autoconfigure: true
         public: false
+
+    Derafu\ETL\Database\Contract\DatabaseManagerInterface:
+        class: Derafu\ETL\Database\DatabaseManager
+        arguments:
+            $spreadsheetFactory: '@Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface'
+            $spreadsheetCaster: '@Derafu\Spreadsheet\Contract\SpreadsheetCasterInterface'
+            $spreadsheetLoader: '@Derafu\Spreadsheet\Contract\SpreadsheetLoaderInterface'
+            $spreadsheetDumper: '@Derafu\Spreadsheet\Contract\SpreadsheetDumperInterface'
+
+    Derafu\ETL\Extract\Contract\DataExtractorInterface:
+        class: Derafu\ETL\Extract\DataExtractor
+        arguments:
+            $databaseManager: '@Derafu\ETL\Database\Contract\DatabaseManagerInterface'
+
+    Derafu\ETL\Transform\Contract\DataTransformerInterface:
+        class: Derafu\ETL\Transform\DataTransformer
+
+    Derafu\ETL\Load\Contract\DataLoaderInterface:
+        class: Derafu\ETL\Load\DataLoader
+        arguments:
+            $databaseManager: '@Derafu\ETL\Database\Contract\DatabaseManagerInterface'
+
+    # Pipelines hold source, target and rules for one configured transfer.
+    Derafu\ETL\Pipeline\Contract\PipelineInterface:
+        class: Derafu\ETL\Pipeline\Pipeline
+        shared: false
+        arguments:
+            $extractor: '@Derafu\ETL\Extract\Contract\DataExtractorInterface'
+            $transformer: '@Derafu\ETL\Transform\Contract\DataTransformerInterface'
+            $loader: '@Derafu\ETL\Load\Contract\DataLoaderInterface'
+
+    # Symfony command entry point; the application registers it with its console.
+    Derafu\ETL\Command\PipelineCommand:
+        arguments:
+            $pipeline: '@Derafu\ETL\Pipeline\Contract\PipelineInterface'
 
     # Feeds resources/translations into the consuming app's Translator (the
     # app must pass $resourceProviders: !tagged_iterator

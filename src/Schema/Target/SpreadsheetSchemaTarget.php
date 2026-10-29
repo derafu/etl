@@ -19,6 +19,7 @@ use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaTargetInterface;
 use Derafu\ETL\Schema\Contract\TableInterface;
 use Derafu\Spreadsheet\Contract\SheetInterface;
+use Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Spreadsheet\SpreadsheetFactory;
 
@@ -31,9 +32,11 @@ class SpreadsheetSchemaTarget implements SchemaTargetInterface
      * Constructor.
      *
      * @param string $schemaSheetName The name of the schema sheet.
+     * @param SpreadsheetFactoryInterface $spreadsheetFactory Factory used to create the schema document.
      */
     public function __construct(
-        private readonly string $schemaSheetName = '__schema'
+        private readonly string $schemaSheetName = '__schema',
+        private readonly SpreadsheetFactoryInterface $spreadsheetFactory = new SpreadsheetFactory()
     ) {
     }
 
@@ -42,9 +45,7 @@ class SpreadsheetSchemaTarget implements SchemaTargetInterface
      */
     public function applySchema(SchemaInterface $schema): SpreadsheetInterface
     {
-        // Create the spreadsheet factory.
-        $factory = new SpreadsheetFactory();
-        $spreadsheet = $factory->create();
+        $spreadsheet = $this->spreadsheetFactory->create();
 
         // Create schema metadata sheet.
         $schemaSheet = $spreadsheet->createSheet(

@@ -1,0 +1,9 @@
+imports:
+    - { resource: 'services.yaml' }
+
+services:
+    Derafu\TestsETL\Fixture\RecordingCaster:
+        decorates: Derafu\Spreadsheet\Contract\SpreadsheetCasterInterface
+        public: true
+        arguments:
+            $inner: '@Derafu\TestsETL\Fixture\RecordingCaster.inner'

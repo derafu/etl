@@ -12,12 +12,14 @@ declare(strict_types=1);
 
 namespace Derafu\TestsETL;
 
+use Composer\InstalledVersions;
 use Derafu\ETL\Schema\Table;
 use Derafu\ETL\Translation\EtlTranslationResourceProvider;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Derafu\Translation\TranslatorFactory;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -25,7 +27,7 @@ use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\Translation\Translator;
 
 /**
- * Import the provider-only YAML and consume its tagged translation resources.
+ * Import the production YAML and consume its tagged translation resources.
  */
 #[CoversNothing]
 final class ServicesTest extends TestCase
@@ -33,7 +35,11 @@ final class ServicesTest extends TestCase
     private function load(): ContainerBuilder
     {
         $container = new ContainerBuilder();
-        (new YamlFileLoader($container, new FileLocator(dirname(__DIR__, 2) . '/resources/config')))
+        (new YamlFileLoader($container, new FileLocator([
+            dirname(__DIR__, 2) . '/resources/config',
+            (InstalledVersions::getInstallPath('derafu/spreadsheet')
+                ?? throw new RuntimeException('derafu/spreadsheet must be installed for these tests.')) . '/resources/config',
+        ])))
             ->load('etl-services.yaml');
 
         return $container;

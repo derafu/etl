@@ -25,11 +25,13 @@ use Derafu\ETL\Schema\Source\SpreadsheetSchemaSource;
 use Derafu\ETL\Schema\Table;
 use Derafu\ETL\Schema\Target\SpreadsheetSchemaTarget;
 use Derafu\Spreadsheet\Contract\SpreadsheetDumperInterface;
+use Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetLoaderInterface;
 use Derafu\Spreadsheet\Sheet;
 use Derafu\Spreadsheet\Spreadsheet;
 use Derafu\Spreadsheet\SpreadsheetDumper;
+use Derafu\Spreadsheet\SpreadsheetFactory;
 use Derafu\Spreadsheet\SpreadsheetLoader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Throwable;
@@ -52,13 +54,18 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
      *
      * @param SpreadsheetInterface $spreadsheet The spreadsheet.
      * @param array<array-key, mixed> $options The options for the database (not only for spreadsheet).
+     * @param SchemaSourceInterface|null $schemaSource Schema reader, or the spreadsheet default.
+     * @param SpreadsheetLoaderInterface|null $loader Shared loader, or a standalone default.
+     * @param SpreadsheetDumperInterface|null $dumper Shared dumper, or a standalone default.
+     * @param SpreadsheetFactoryInterface $spreadsheetFactory Factory for schema documents and standalone I/O.
      */
     public function __construct(
         SpreadsheetInterface $spreadsheet,
         array $options = [],
         ?SchemaSourceInterface $schemaSource = null,
         ?SpreadsheetLoaderInterface $loader = null,
-        ?SpreadsheetDumperInterface $dumper = null
+        ?SpreadsheetDumperInterface $dumper = null,
+        private readonly SpreadsheetFactoryInterface $spreadsheetFactory = new SpreadsheetFactory()
     ) {
         foreach ($spreadsheet->getSheets() as $sheet) {
             $spreadsheet->addSheet($sheet->toAssociative());
@@ -67,8 +74,8 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
         parent::__construct($spreadsheet, $options);
 
         $this->schemaSource = $schemaSource ?? new SpreadsheetSchemaSource();
-        $this->loader = $loader ?? new SpreadsheetLoader();
-        $this->dumper = $dumper ?? new SpreadsheetDumper();
+        $this->loader = $loader ?? new SpreadsheetLoader($this->spreadsheetFactory);
+        $this->dumper = $dumper ?? new SpreadsheetDumper($this->spreadsheetFactory);
     }
 
     /**
@@ -324,7 +331,7 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
             $rowsLoaded += count($validated);
         }
         if ($schemaChanged) {
-            $metadata = (new SpreadsheetSchemaTarget($schemaSheetName))->applySchema($nextSchema)->getSheet($schemaSheetName);
+            $metadata = (new SpreadsheetSchemaTarget($schemaSheetName, $this->spreadsheetFactory))->applySchema($nextSchema)->getSheet($schemaSheetName);
             if ($metadata !== null) {
                 $sheets[] = $metadata;
             }
@@ -479,7 +486,7 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
     private function tableDefinition(TableInterface $table): array
     {
         $schema = (new Schema())->addTable($table);
-        $rows = (new SpreadsheetSchemaTarget())->applySchema($schema)->getSheet('__schema')?->getRows() ?? [];
+        $rows = (new SpreadsheetSchemaTarget(spreadsheetFactory: $this->spreadsheetFactory))->applySchema($schema)->getSheet('__schema')?->getRows() ?? [];
         $definition = array_values(array_filter(
             $rows,
             static fn (array $row): bool => in_array($row['type'] ?? null, ['table', 'column', 'index', 'foreign_key'], true)

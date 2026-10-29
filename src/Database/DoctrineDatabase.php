@@ -20,7 +20,9 @@ use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Source\DoctrineSchemaSource;
 use Derafu\ETL\Schema\Target\DoctrineSchemaTarget;
 use Derafu\ETL\Schema\Target\SpreadsheetSchemaTarget;
+use Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
+use Derafu\Spreadsheet\SpreadsheetFactory;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Doctrine\DBAL\Connection as DoctrineConnection;
@@ -58,10 +60,12 @@ final class DoctrineDatabase extends AbstractDatabase implements TransactionalDa
      *
      * @param DoctrineConnection|array<array-key, mixed>|string $doctrine The Doctrine DBAL connection.
      * @param array<array-key, mixed> $options The database options.
+     * @param SpreadsheetFactoryInterface $spreadsheetFactory Factory for spreadsheet exports.
      */
     public function __construct(
         DoctrineConnection|array|string $doctrine,
-        array $options = []
+        array $options = [],
+        private readonly SpreadsheetFactoryInterface $spreadsheetFactory = new SpreadsheetFactory()
     ) {
         if (is_string($doctrine)) {
             $doctrine = DoctrineDriverManager::getConnection([
@@ -172,7 +176,7 @@ final class DoctrineDatabase extends AbstractDatabase implements TransactionalDa
 
         $schema = (new DoctrineSchemaSource($this->connection->getDatabasePlatform()))->extractSchema($doctrineSchema);
 
-        $spreadsheet = (new SpreadsheetSchemaTarget())->applySchema($schema);
+        $spreadsheet = (new SpreadsheetSchemaTarget(spreadsheetFactory: $this->spreadsheetFactory))->applySchema($schema);
 
         // Populate the generated sheets directly. Loading this database through
         // SpreadsheetDatabase would request this conversion again recursively.

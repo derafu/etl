@@ -16,11 +16,15 @@ use Derafu\ETL\Database\Contract\DatabaseInterface;
 use Derafu\ETL\Database\Contract\DatabaseManagerInterface;
 use Derafu\ETL\Schema\Schema;
 use Derafu\ETL\Schema\Target\SpreadsheetSchemaTarget;
+use Derafu\Spreadsheet\Contract\SpreadsheetCasterInterface;
+use Derafu\Spreadsheet\Contract\SpreadsheetDumperInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
+use Derafu\Spreadsheet\Contract\SpreadsheetLoaderInterface;
 use Derafu\Spreadsheet\SpreadsheetCaster;
 use Derafu\Spreadsheet\SpreadsheetDumper;
 use Derafu\Spreadsheet\SpreadsheetFactory;
+use Derafu\Spreadsheet\SpreadsheetLoader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Doctrine\DBAL\Connection as DoctrineConnection;
 
@@ -40,15 +44,30 @@ final class DatabaseManager implements DatabaseManagerInterface
      */
     private SpreadsheetFactoryInterface $spreadsheetFactory;
 
+    private SpreadsheetCasterInterface $spreadsheetCaster;
+
+    private SpreadsheetLoaderInterface $spreadsheetLoader;
+
+    private SpreadsheetDumperInterface $spreadsheetDumper;
+
     /**
      * Constructor.
      *
-     * @param SpreadsheetFactoryInterface $spreadsheetFactory The spreadsheet factory.
+     * @param SpreadsheetFactoryInterface|null $spreadsheetFactory Shared factory, or a standalone default.
+     * @param SpreadsheetCasterInterface|null $spreadsheetCaster Shared caster, or a standalone default.
+     * @param SpreadsheetLoaderInterface|null $spreadsheetLoader Loader for runtime spreadsheet adapters.
+     * @param SpreadsheetDumperInterface|null $spreadsheetDumper Dumper for new files and runtime adapters.
      */
     public function __construct(
-        ?SpreadsheetFactoryInterface $spreadsheetFactory = null
+        ?SpreadsheetFactoryInterface $spreadsheetFactory = null,
+        ?SpreadsheetCasterInterface $spreadsheetCaster = null,
+        ?SpreadsheetLoaderInterface $spreadsheetLoader = null,
+        ?SpreadsheetDumperInterface $spreadsheetDumper = null
     ) {
         $this->spreadsheetFactory = $spreadsheetFactory ?? new SpreadsheetFactory();
+        $this->spreadsheetCaster = $spreadsheetCaster ?? new SpreadsheetCaster();
+        $this->spreadsheetLoader = $spreadsheetLoader ?? new SpreadsheetLoader($this->spreadsheetFactory, $this->spreadsheetCaster);
+        $this->spreadsheetDumper = $spreadsheetDumper ?? new SpreadsheetDumper($this->spreadsheetFactory, $this->spreadsheetCaster);
     }
 
     /**
@@ -167,7 +186,7 @@ final class DatabaseManager implements DatabaseManagerInterface
             ]);
         }
 
-        return new DoctrineDatabase($doctrine, $options);
+        return new DoctrineDatabase($doctrine, $options, $this->spreadsheetFactory);
     }
 
     /**
@@ -196,7 +215,7 @@ final class DatabaseManager implements DatabaseManagerInterface
             if ($metadata !== null) {
                 $schemaDocument = $this->spreadsheetFactory->create();
                 $schemaDocument->addSheet($metadata->toAssociative());
-                $schemaDocument = (new SpreadsheetCaster())->castAfterLoad($schemaDocument);
+                $schemaDocument = $this->spreadsheetCaster->castAfterLoad($schemaDocument);
                 foreach ($schemaDocument->getSheets() as $sheet) {
                     $options['spreadsheet']->addSheet($sheet);
                 }
@@ -207,9 +226,9 @@ final class DatabaseManager implements DatabaseManagerInterface
             // XLSX requires a sheet: an empty ETL schema is meaningful metadata,
             // not a placeholder business table, and remains after data is loaded.
             $options['spreadsheet'] = $format === 'xlsx'
-                ? (new SpreadsheetSchemaTarget())->applySchema(new Schema())
+                ? (new SpreadsheetSchemaTarget(spreadsheetFactory: $this->spreadsheetFactory))->applySchema(new Schema())
                 : $this->spreadsheetFactory->create();
-            (new SpreadsheetDumper($this->spreadsheetFactory))->dumpToFile($options['spreadsheet'], $file, $format);
+            $this->spreadsheetDumper->dumpToFile($options['spreadsheet'], $file, $format);
         }
 
         return $this->connectToSpreadsheet($options);
@@ -267,7 +286,13 @@ final class DatabaseManager implements DatabaseManagerInterface
 
         unset($options['spreadsheet']);
 
-        return new SpreadsheetDatabase($spreadsheet, $options);
+        return new SpreadsheetDatabase(
+            $spreadsheet,
+            $options,
+            loader: $this->spreadsheetLoader,
+            dumper: $this->spreadsheetDumper,
+            spreadsheetFactory: $this->spreadsheetFactory
+        );
     }
 
     /**

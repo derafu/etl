@@ -1,0 +1,17 @@
+imports:
+    - { resource: '../../../resources/config/etl-services.yaml' }
+
+# Public test entry points alias the unchanged production definitions.
+services:
+    test.manager:
+        alias: Derafu\ETL\Database\Contract\DatabaseManagerInterface
+        public: true
+    test.pipeline:
+        alias: Derafu\ETL\Pipeline\Contract\PipelineInterface
+        public: true
+    test.command:
+        alias: Derafu\ETL\Command\PipelineCommand
+        public: true
+    test.factory:
+        alias: Derafu\Spreadsheet\Contract\SpreadsheetFactoryInterface
+        public: true
