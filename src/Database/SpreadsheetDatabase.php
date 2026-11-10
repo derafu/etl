@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\ETL\Database;
 
 use Closure;
+use Derafu\Array\ArrayReader;
 use Derafu\ETL\Database\Abstract\AbstractDatabase;
 use Derafu\ETL\Database\Contract\DatabaseInterface;
 use Derafu\ETL\Database\Contract\TransactionalDatabaseInterface;
@@ -34,6 +35,8 @@ use Derafu\Spreadsheet\SpreadsheetDumper;
 use Derafu\Spreadsheet\SpreadsheetFactory;
 use Derafu\Spreadsheet\SpreadsheetLoader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\Exception\ValueException;
+use Derafu\Value\ValueType;
 use Throwable;
 
 /**
@@ -83,7 +86,8 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
      */
     public function dump(array $options = []): string
     {
-        $format = $this->requireString($options['format'] ?? $this->options['format'] ?? 'xlsx', 'format');
+        $reader = ArrayReader::fromArray($options);
+        $format = $this->readOption($reader, 'format', ValueType::string(), $this->options['format'] ?? 'xlsx');
 
         return $this->dumper->dumpToString($this->connection, $format);
     }
@@ -109,7 +113,8 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
      */
     public function data(array $options = []): array
     {
-        $table = isset($options['table']) ? $this->requireString($options['table'], 'table') : null;
+        $reader = ArrayReader::fromArray($options);
+        $table = $this->readOption($reader, 'table', ValueType::string()->nullable());
 
         if ($table === null) {
             $tables = array_intersect_key(
@@ -223,7 +228,7 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
             'Format is required for loading from dump in a spreadsheet database.'
         );
 
-        $format = $this->requireString($format, 'format');
+        $format = $this->readOption(ArrayReader::fromArray($options), 'format', ValueType::string(), $format);
 
         // Load the source spreadsheet from the dump.
         $sourceSpreadsheet = $this->loader->loadFromString($source, $format);
@@ -259,10 +264,11 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
      */
     private function loadTables(array $source, array $options, ?SchemaInterface $sourceSchema = null): int
     {
-        $dropDatabase = $this->requireBool($options['dropDatabase'] ?? false, 'dropDatabase');
-        $dropTables = $this->requireBool($options['dropTables'] ?? false, 'dropTables');
-        $dropData = $this->requireBool($options['dropData'] ?? false, 'dropData');
-        $schemaSheetName = $this->requireString($options['schemaSheetName'] ?? '__schema', 'schemaSheetName');
+        $reader = ArrayReader::fromArray($options);
+        $dropDatabase = $this->readOption($reader, 'dropDatabase', ValueType::bool(), false);
+        $dropTables = $this->readOption($reader, 'dropTables', ValueType::bool(), false);
+        $dropData = $this->readOption($reader, 'dropData', ValueType::bool(), false);
+        $schemaSheetName = $this->readOption($reader, 'schemaSheetName', ValueType::string(), '__schema');
         $currentSchema = $dropDatabase ? new Schema() : $this->schema();
         $nextSchema = new Schema($currentSchema->getName());
         foreach ($currentSchema->getTables() as $table) {
@@ -448,19 +454,6 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
         return $values;
     }
 
-    private function requireBool(mixed $value, string $option): bool
-    {
-        if (!is_bool($value)) {
-            throw new InvalidArgumentException([
-                'Option "{option}" must be a boolean; {type} given.',
-                'option' => $option,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
-    }
-
     /**
      * {@inheritDoc}
      */
@@ -497,16 +490,33 @@ final class SpreadsheetDatabase extends AbstractDatabase implements Transactiona
         return $definition;
     }
 
-    private function requireString(mixed $value, string $option): string
+    /**
+     * Reads a database option while retaining its contextual error and default.
+     *
+     * @template T
+     * @param ArrayReader $reader
+     * @param string $option
+     * @param ValueType<T> $type
+     * @param mixed $default Used for an absent or null option.
+     * @return T
+     */
+    private function readOption(ArrayReader $reader, string $option, ValueType $type, mixed $default = null): mixed
     {
-        if (!is_string($value)) {
-            throw new InvalidArgumentException([
-                'Option "{option}" must be a string; {type} given.',
-                'option' => $option,
-                'type' => get_debug_type($value),
-            ]);
+        $value = $reader->get($option, ValueType::mixed(), $default);
+        try {
+            return $type->parse($value, path: $option);
+        } catch (ValueException $exception) {
+            throw $type->name === 'bool'
+                ? new InvalidArgumentException([
+                    'Option "{option}" must be a boolean; {type} given.',
+                    'option' => $option,
+                    'type' => get_debug_type($value),
+                ], previous: $exception)
+                : new InvalidArgumentException([
+                    'Option "{option}" must be a string; {type} given.',
+                    'option' => $option,
+                    'type' => get_debug_type($value),
+                ], previous: $exception);
         }
-
-        return $value;
     }
 }

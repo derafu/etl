@@ -246,6 +246,7 @@ final class SqliteSchemaTargetTest extends TestCase
 
             // Verify some basic queries work.
             foreach ($userTables as $table) {
+                $this->assertIsString($table);
                 $stmt = $pdo->query("SELECT * FROM `$table` LIMIT 0");
                 $this->assertNotFalse($stmt, "Should be able to query table '$table'.");
 

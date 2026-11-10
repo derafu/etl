@@ -23,6 +23,7 @@ use Derafu\ETL\Translation\EtlTranslationResourceProvider;
 use Derafu\Spreadsheet\Spreadsheet;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\TranslatorFactory;
+use Derafu\Value\Exception\TypeMismatchException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -141,8 +142,64 @@ final class SchemaValidationTest extends TestCase
             $this->fail('An invalid schema field type must be rejected.');
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('Schema field "' . $field . '"', $exception->getMessage());
+            $this->assertInstanceOf(TypeMismatchException::class, $exception->getPrevious());
             $translator = TranslatorFactory::create('es', resourceProviders: [new EtlTranslationResourceProvider()]);
             $this->assertStringContainsString('El campo del esquema "' . $field . '"', $exception->trans($translator));
+        }
+    }
+
+    public function testForeignKeyColumnIndexesArePreserved(): void
+    {
+        $local = [2 => 'tenant_id', 7 => 'parent_id'];
+        $foreign = [-1 => 'tenant_id', 4 => 'id'];
+        $source = new Spreadsheet();
+        $source->createSheet('__schema', [
+            ['type' => 'table', 'name' => 'products', 'properties' => []],
+            ['type' => 'foreign_key', 'name' => 'products.parent', 'properties' => [
+                'foreign_table' => 'products',
+                'local_columns' => $local,
+                'foreign_columns' => $foreign,
+            ]],
+        ], true);
+
+        $table = (new SpreadsheetSchemaSource())->extractSchema($source)->getTable('products');
+        $this->assertNotNull($table);
+        $foreignKeys = $table->getForeignKeys();
+        $this->assertCount(1, $foreignKeys);
+        $this->assertSame($local, $foreignKeys[0]->getLocalColumns());
+        $this->assertSame($foreign, $foreignKeys[0]->getForeignColumns());
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function foreignKeyColumnFields(): iterable
+    {
+        yield 'local' => ['local_columns'];
+        yield 'foreign' => ['foreign_columns'];
+    }
+
+    #[DataProvider('foreignKeyColumnFields')]
+    public function testForeignKeyColumnsRejectStringIndexes(string $field): void
+    {
+        $properties = [
+            'foreign_table' => 'products',
+            'local_columns' => ['id'],
+            'foreign_columns' => ['id'],
+        ];
+        $properties[$field] = ['named' => 'id'];
+        $source = new Spreadsheet();
+        $source->createSheet('__schema', [
+            ['type' => 'table', 'name' => 'products', 'properties' => []],
+            ['type' => 'foreign_key', 'name' => 'products.parent', 'properties' => $properties],
+        ], true);
+
+        try {
+            (new SpreadsheetSchemaSource())->extractSchema($source);
+            $this->fail('Foreign key column indexes must be integers.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('foreign_key.' . $field, $exception->getMessage());
+            $cause = $exception->getPrevious();
+            $this->assertInstanceOf(TypeMismatchException::class, $cause);
+            $this->assertStringContainsString('int key', $cause->getMessage());
         }
     }
 

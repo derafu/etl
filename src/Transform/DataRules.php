@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\ETL\Transform;
 
 use Derafu\ETL\Transform\Contract\DataRulesInterface;
+use Derafu\Value\ValueType;
 
 /**
  * DataRules is a class that contains the rules for the transformation of the
@@ -34,7 +35,7 @@ final class DataRules implements DataRulesInterface
      */
     public function transform(array $data): array
     {
-        foreach ($this->rules as $rule) {
+        foreach ($this->rules as $index => $rule) {
             // If the rule is an instance of DataRulesInterface, transform the
             // data using the rules.
             if ($rule instanceof DataRulesInterface) {
@@ -43,7 +44,11 @@ final class DataRules implements DataRulesInterface
 
             // If the rule is a callable, apply it to the data.
             if (is_callable($rule)) {
-                $data = $rule($data);
+                $data = ValueType::array()->parse(
+                    $rule($data),
+                    path: ValueType::path('rules', $index),
+                    source: self::class
+                );
             }
         }
 

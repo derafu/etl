@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\ETL\Database;
 
+use Derafu\Array\ArrayReader;
 use Derafu\ETL\Database\Contract\DatabaseInterface;
 use Derafu\ETL\Database\Contract\DatabaseManagerInterface;
 use Derafu\ETL\Schema\Schema;
@@ -26,6 +27,8 @@ use Derafu\Spreadsheet\SpreadsheetDumper;
 use Derafu\Spreadsheet\SpreadsheetFactory;
 use Derafu\Spreadsheet\SpreadsheetLoader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\Exception\ValueException;
+use Derafu\Value\ValueType;
 use Doctrine\DBAL\Connection as DoctrineConnection;
 
 /**
@@ -199,8 +202,9 @@ final class DatabaseManager implements DatabaseManagerInterface
      */
     private function connectToFile(array $options): DatabaseInterface
     {
-        $file = $this->requireString($options['file'], 'file');
-        $format = $this->requireString($options['format'] ?? pathinfo($file, PATHINFO_EXTENSION), 'format');
+        $reader = ArrayReader::fromArray($options);
+        $file = $this->requireString($reader->get('file', ValueType::mixed()), 'file');
+        $format = $this->requireString($reader->get('format', ValueType::mixed(), pathinfo($file, PATHINFO_EXTENSION)), 'format');
 
         $exists = file_exists($file);
         $this->validateFile($file, $options);
@@ -245,8 +249,9 @@ final class DatabaseManager implements DatabaseManagerInterface
      */
     private function connectToData(array $options): DatabaseInterface
     {
-        $data = $this->requireString($options['data'], 'data');
-        $format = $options['format']
+        $reader = ArrayReader::fromArray($options);
+        $data = $this->requireString($reader->get('data', ValueType::mixed()), 'data');
+        $format = $reader->get('format', ValueType::mixed())
             ?? throw new InvalidArgumentException(
                 'Format is required for data connection.'
             )
@@ -358,14 +363,14 @@ final class DatabaseManager implements DatabaseManagerInterface
 
     private function requireString(mixed $value, string $option): string
     {
-        if (!is_string($value)) {
+        try {
+            return ValueType::string()->parse($value, path: $option);
+        } catch (ValueException $exception) {
             throw new InvalidArgumentException([
                 'Option "{option}" must be a string; {type} given.',
                 'option' => $option,
                 'type' => get_debug_type($value),
-            ]);
+            ], previous: $exception);
         }
-
-        return $value;
     }
 }

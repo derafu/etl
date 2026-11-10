@@ -76,6 +76,9 @@ final class PipelineOperationsTest extends TestCase
 
         $pipeline = (new Pipeline())->extract($source)->transform([
             static function (array $data): array {
+                self::assertIsArray($data['products']);
+                self::assertIsArray($data['products'][0]);
+                self::assertIsString($data['products'][0]['name']);
                 $data['products'][0]['name'] = strtoupper($data['products'][0]['name']);
                 return $data;
             },

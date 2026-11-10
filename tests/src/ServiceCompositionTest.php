@@ -85,6 +85,7 @@ final class ServiceCompositionTest extends TestCase
         $source = $this->source($container);
         $target = $this->directory . '/products.sqlite';
         $rules = require __DIR__ . '/../fixtures/rules/callable-product-names.php';
+        $this->assertIsArray($rules);
         $result = $this->pipeline($container)->extract($source)->transform($rules)->load(['file' => $target, 'format' => 'sqlite'])->execute();
         $this->assertSame(1, $result->rowsLoaded());
         $database = $result->target()->database();

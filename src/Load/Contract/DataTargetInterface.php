@@ -27,7 +27,7 @@ interface DataTargetInterface
      * Sync the target with the source.
      *
      * @param DataSourceInterface $source The source.
-     * @param array<string,mixed> $options The options.
+     * @param array<array-key,mixed> $options The options.
      * @return self The target.
      */
     public function sync(

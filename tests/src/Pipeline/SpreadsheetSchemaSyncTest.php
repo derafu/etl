@@ -155,6 +155,8 @@ final class SpreadsheetSchemaSyncTest extends TestCase
         try {
             (new Pipeline())->extract($source)->transform([
                 static function (array $data): array {
+                    self::assertIsArray($data['products']);
+                    self::assertIsArray($data['products'][1]);
                     $data['products'][1]['sku'] = null;
                     return $data;
                 },

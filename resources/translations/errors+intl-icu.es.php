@@ -11,6 +11,8 @@ declare(strict_types=1);
  */
 
 return [
+    'Doctrine option "{option}" must contain at least one connection.' =>
+        'La opción "{option}" de Doctrine debe contener al menos una conexión.',
     'Platform text options must map non-empty engine names to arrays.' =>
         'Las opciones de texto de plataforma deben asociar nombres de motor no vacíos con arreglos.',
     'Unsupported platform text option "{option}".' =>

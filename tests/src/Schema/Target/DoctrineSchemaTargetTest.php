@@ -121,6 +121,7 @@ final class DoctrineSchemaTargetTest extends TestCase
     {
         // Test roundtrip conversion: Doctrine DBAL -> Our Schema -> Doctrine DBAL.
         $originalDoctrineSchema = require __DIR__ . '/../../../fixtures/doctrine-dbal-schema.php';
+        $this->assertInstanceOf(DoctrineSchema::class, $originalDoctrineSchema);
 
         // Original schema tables and columns.
         $originalTables = [];

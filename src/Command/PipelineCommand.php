@@ -16,6 +16,8 @@ use Derafu\ETL\Pipeline\Contract\PipelineInterface;
 use Derafu\ETL\Pipeline\Pipeline;
 use Derafu\ETL\Transform\Contract\DataRulesInterface;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\Exception\ValueException;
+use Derafu\Value\ValueType;
 use Exception;
 use JsonException;
 use Stringable;
@@ -316,14 +318,14 @@ final class PipelineCommand extends Command
 
     private function requirePath(mixed $value, string $argument): string
     {
-        if (!is_string($value)) {
+        try {
+            return ValueType::string()->parse($value, path: $argument);
+        } catch (ValueException $exception) {
             throw new InvalidArgumentException([
                 'Argument "{argument}" must be a string; {type} given.',
                 'argument' => $argument,
                 'type' => get_debug_type($value),
-            ]);
+            ], previous: $exception);
         }
-
-        return $value;
     }
 }

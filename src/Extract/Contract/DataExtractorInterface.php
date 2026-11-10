@@ -41,7 +41,7 @@ interface DataExtractorInterface
      * Extract data from the source.
      *
      * @param DataSourceInterface $source
-     * @return array<string,array<string,mixed>>
+     * @return array<string,array<array-key,mixed>>
      */
     public function extract(DataSourceInterface $source): array;
 }

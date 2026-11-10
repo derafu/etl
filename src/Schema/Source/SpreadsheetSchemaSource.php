@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\ETL\Schema\Source;
 
+use Derafu\Array\ArrayReader;
 use Derafu\ETL\Schema\Column;
 use Derafu\ETL\Schema\Contract\SchemaInterface;
 use Derafu\ETL\Schema\Contract\SchemaSourceInterface;
@@ -24,6 +25,8 @@ use Derafu\Spreadsheet\Contract\SheetInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\Exception\TypeMismatchException;
+use Derafu\Value\ValueType;
 
 /**
  * Extracts schema information from a Derafu Spreadsheet.
@@ -168,9 +171,9 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
 
         foreach ($rows as $row) {
             if ($row['type'] === 'metadata' && $row['name'] === 'schema') {
-                $properties = $this->requireArray($row['properties'] ?? [], 'metadata.properties');
-                if (isset($properties['name'])) {
-                    $schema->setName($this->requireString($properties['name'], 'metadata.name'));
+                $properties = ArrayReader::fromArray($this->schemaField($row['properties'] ?? [], 'metadata.properties', ValueType::array()));
+                if ($properties->hasValue('name')) {
+                    $schema->setName($this->schemaField($properties->get('name', ValueType::mixed()), 'metadata.name', ValueType::string()));
                 }
             }
         }
@@ -198,11 +201,11 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
 
         // Group rows by type.
         foreach ($rows as $row) {
-            $type = $this->requireString($row['type'] ?? null, 'row.type');
+            $type = $this->schemaField($row['type'] ?? null, 'row.type', ValueType::string());
             if (isset($groupedRows[$type])) {
                 $groupedRows[$type][] = [
-                    'name' => $this->requireString($row['name'] ?? null, $type . '.name'),
-                    'properties' => $this->requireArray($row['properties'] ?? [], $type . '.properties'),
+                    'name' => $this->schemaField($row['name'] ?? null, $type . '.name', ValueType::string()),
+                    'properties' => ArrayReader::fromArray($this->schemaField($row['properties'] ?? [], $type . '.properties', ValueType::array())),
                 ];
             }
         }
@@ -210,11 +213,11 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
         // Process tables first.
         foreach ($groupedRows['table'] as $tableRow) {
             $table = new Table($tableRow['name']);
-            $table->setPlatformOptions($this->requireArray($tableRow['properties']['platform_options'] ?? [], 'table.platform_options'));
+            $table->setPlatformOptions($this->schemaField($tableRow['properties']->get('platform_options', ValueType::mixed()) ?? [], 'table.platform_options', ValueType::array()));
 
             // Set primary key if available.
-            if (isset($tableRow['properties']['primary_key'])) {
-                $table->setPrimaryKey($this->requireStringArray($tableRow['properties']['primary_key'], 'table.primary_key'));
+            if ($tableRow['properties']->hasValue('primary_key')) {
+                $table->setPrimaryKey($this->schemaField($tableRow['properties']->get('primary_key', ValueType::mixed()), 'table.primary_key', ValueType::arrayOf(ValueType::string())));
             }
 
             $schema->addTable($table);
@@ -242,30 +245,30 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
                 ]);
             }
 
-            $column = new Column($columnName, $this->requireString($properties['type'] ?? 'string', 'column.type'));
+            $column = new Column($columnName, $this->schemaField($properties->get('type', ValueType::mixed()) ?? 'string', 'column.type', ValueType::string()));
 
-            $column->setPlatformOptions($this->requireArray($properties['platform_options'] ?? [], 'column.platform_options'));
+            $column->setPlatformOptions($this->schemaField($properties->get('platform_options', ValueType::mixed()) ?? [], 'column.platform_options', ValueType::array()));
 
             // Set nullable property.
-            $column->setNullable($this->requireBool($properties['nullable'] ?? true, 'column.nullable'));
+            $column->setNullable($this->schemaField($properties->get('nullable', ValueType::mixed()) ?? true, 'column.nullable', ValueType::bool()));
 
             // Set length property.
-            if (isset($properties['length'])) {
-                $column->setLength($this->requireInt($properties['length'], 'column.length'));
+            if ($properties->hasValue('length')) {
+                $column->setLength($this->schemaField($properties->get('length', ValueType::mixed()), 'column.length', ValueType::int()));
             }
 
             // Set precision property.
-            if (isset($properties['precision'])) {
-                $column->setPrecision($this->requireInt($properties['precision'], 'column.precision'));
+            if ($properties->hasValue('precision')) {
+                $column->setPrecision($this->schemaField($properties->get('precision', ValueType::mixed()), 'column.precision', ValueType::int()));
 
-                if (isset($properties['scale'])) {
-                    $column->setScale($this->requireInt($properties['scale'], 'column.scale'));
+                if ($properties->hasValue('scale')) {
+                    $column->setScale($this->schemaField($properties->get('scale', ValueType::mixed()), 'column.scale', ValueType::int()));
                 }
             }
 
             // Set default property.
-            if (isset($properties['default'])) {
-                $column->setDefault($properties['default']);
+            if ($properties->hasValue('default')) {
+                $column->setDefault($properties->get('default', ValueType::mixed()));
             }
 
             // Add column to table.
@@ -294,7 +297,7 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
                 ]);
             }
 
-            if (!isset($properties['columns']) || !is_array($properties['columns'])) {
+            if (!$properties->hasValue('columns') || !is_array($properties->get('columns', ValueType::mixed()))) {
                 throw new RuntimeException([
                     'Missing columns for index "{index}" in table "{table}".',
                     'index' => $indexName,
@@ -332,9 +335,9 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             }
 
             if (
-                !is_array($properties['local_columns'] ?? null)
-                || !isset($properties['foreign_table'])
-                || !is_array($properties['foreign_columns'] ?? null)
+                !is_array($properties->get('local_columns', ValueType::mixed()) ?? null)
+                || !$properties->hasValue('foreign_table')
+                || !is_array($properties->get('foreign_columns', ValueType::mixed()) ?? null)
             ) {
                 throw new RuntimeException([
                     'Missing required properties for foreign key "{foreign_key}" in table "{table}".',
@@ -344,18 +347,18 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             }
 
             $foreignKey = new ForeignKey(
-                $this->requireString($properties['foreign_table'], 'foreign_key.foreign_table'),
-                $this->requireStringArray($properties['local_columns'], 'foreign_key.local_columns'),
-                $this->requireStringArray($properties['foreign_columns'], 'foreign_key.foreign_columns'),
+                $this->schemaField($properties->get('foreign_table', ValueType::mixed()), 'foreign_key.foreign_table', ValueType::string()),
+                $this->schemaField($properties->get('local_columns', ValueType::mixed()), 'foreign_key.local_columns', ValueType::indexedOf(ValueType::string())),
+                $this->schemaField($properties->get('foreign_columns', ValueType::mixed()), 'foreign_key.foreign_columns', ValueType::indexedOf(ValueType::string())),
                 $fkName
             );
 
-            if (isset($properties['on_delete'])) {
-                $foreignKey->setOnDelete($this->requireString($properties['on_delete'], 'foreign_key.on_delete'));
+            if ($properties->hasValue('on_delete')) {
+                $foreignKey->setOnDelete($this->schemaField($properties->get('on_delete', ValueType::mixed()), 'foreign_key.on_delete', ValueType::string()));
             }
 
-            if (isset($properties['on_update'])) {
-                $foreignKey->setOnUpdate($this->requireString($properties['on_update'], 'foreign_key.on_update'));
+            if ($properties->hasValue('on_update')) {
+                $foreignKey->setOnUpdate($this->schemaField($properties->get('on_update', ValueType::mixed()), 'foreign_key.on_update', ValueType::string()));
             }
 
             $table->addForeignKey($foreignKey);
@@ -371,31 +374,31 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
      *
      * @param string $indexName The index name.
      * @param string $tableName The table name.
-     * @param array<array-key, mixed> $properties The properties of the index row.
+     * @param ArrayReader $properties The properties of the index row.
      * @return Index
      */
     private function createIndex(
         string $indexName,
         string $tableName,
-        array $properties
+        ArrayReader $properties
     ): Index {
         $type = IndexType::REGULAR;
-        $clustered = (bool) ($properties['clustered'] ?? false);
+        $clustered = (bool) ($properties->get('clustered', ValueType::mixed()) ?? false);
 
-        if (isset($properties['type'])) {
-            $type = IndexType::tryFrom($this->requireString($properties['type'], 'index.type'))
+        if ($properties->hasValue('type')) {
+            $type = IndexType::tryFrom($this->schemaField($properties->get('type', ValueType::mixed()), 'index.type', ValueType::string()))
                 ?? throw new RuntimeException([
                     'Invalid type "{type}" for index "{index}" in table "{table}".',
-                    'type' => $properties['type'],
+                    'type' => $properties->get('type', ValueType::mixed()),
                     'index' => $indexName,
                     'table' => $tableName,
                 ])
             ;
-        } elseif ($properties['unique'] ?? false) {
+        } elseif ($properties->get('unique', ValueType::mixed()) ?? false) {
             $type = IndexType::UNIQUE;
         }
 
-        foreach ($this->requireArray($properties['flags'] ?? [], 'index.flags') as $flag) {
+        foreach ($this->schemaField($properties->get('flags', ValueType::mixed()) ?? [], 'index.flags', ValueType::array()) as $flag) {
             if ($flag === 'clustered') {
                 $clustered = true;
             } elseif (in_array($flag, ['fulltext', 'spatial'], true)) {
@@ -410,71 +413,46 @@ class SpreadsheetSchemaSource implements SchemaSourceInterface
             }
         }
 
-        return new Index($indexName, $this->requireStringArray($properties['columns'], 'index.columns'), $type, $clustered);
+        return new Index($indexName, $this->schemaField($properties->get('columns', ValueType::mixed()), 'index.columns', ValueType::arrayOf(ValueType::string())), $type, $clustered);
     }
 
-    private function requireString(mixed $value, string $field): string
+    /**
+     * Validate a value while retaining the package's contextual exception.
+     *
+     * @template T
+     * @param mixed $value
+     * @param string $field
+     * @param ValueType<T> $type
+     * @return T
+     */
+    private function schemaField(mixed $value, string $field, ValueType $type): mixed
     {
-        if (!is_string($value)) {
-            throw new RuntimeException([
-                'Schema field "{field}" must be a string; {type} given.',
-                'field' => $field,
-                'type' => get_debug_type($value),
-            ]);
+        try {
+            return $type->parse($value, path: $field);
+        } catch (TypeMismatchException $exception) {
+            $details = ArrayReader::fromArray($exception->getTranslatableMessage()->getParameters());
+            throw match ($details->requireString('expected')) {
+                'string' => new RuntimeException([
+                    'Schema field "{field}" must be a string; {type} given.',
+                    'field' => $field,
+                    'type' => $details->requireString('given'),
+                ], previous: $exception),
+                'bool' => new RuntimeException([
+                    'Schema field "{field}" must be a boolean; {type} given.',
+                    'field' => $field,
+                    'type' => $details->requireString('given'),
+                ], previous: $exception),
+                'int', 'int key' => new RuntimeException([
+                    'Schema field "{field}" must be an integer; {type} given.',
+                    'field' => $field,
+                    'type' => $details->requireString('given'),
+                ], previous: $exception),
+                default => new RuntimeException([
+                    'Schema field "{field}" must be an array; {type} given.',
+                    'field' => $field,
+                    'type' => $details->requireString('given'),
+                ], previous: $exception),
+            };
         }
-
-        return $value;
-    }
-
-    private function requireInt(mixed $value, string $field): int
-    {
-        if (!is_int($value)) {
-            throw new RuntimeException([
-                'Schema field "{field}" must be an integer; {type} given.',
-                'field' => $field,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
-    }
-
-    private function requireBool(mixed $value, string $field): bool
-    {
-        if (!is_bool($value)) {
-            throw new RuntimeException([
-                'Schema field "{field}" must be a boolean; {type} given.',
-                'field' => $field,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
-    }
-
-    /** @return array<array-key, mixed> */
-    private function requireArray(mixed $value, string $field): array
-    {
-        if (!is_array($value)) {
-            throw new RuntimeException([
-                'Schema field "{field}" must be an array; {type} given.',
-                'field' => $field,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
-    }
-
-    /** @return array<array-key, string> */
-    private function requireStringArray(mixed $value, string $field): array
-    {
-        $values = $this->requireArray($value, $field);
-        $validated = [];
-        foreach ($values as $key => $item) {
-            $validated[$key] = $this->requireString($item, $field);
-        }
-
-        return $validated;
     }
 }

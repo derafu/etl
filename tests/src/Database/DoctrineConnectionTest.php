@@ -29,6 +29,28 @@ use stdClass;
 #[UsesClass(EtlTranslationResourceProvider::class)]
 final class DoctrineConnectionTest extends TestCase
 {
+    public function testEmptyReplicaOptionsProduceATranslatableConfigurationException(): void
+    {
+        try {
+            new DoctrineDatabase([
+                'driver' => 'pdo_sqlite',
+                'memory' => true,
+                'replica' => [],
+            ]);
+            $this->fail('An explicit replica configuration must contain at least one connection.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertSame(
+                'Doctrine option "replica" must contain at least one connection.',
+                $exception->getMessage()
+            );
+            $translator = TranslatorFactory::create('es', resourceProviders: [new EtlTranslationResourceProvider()]);
+            $this->assertSame(
+                'La opción "replica" de Doctrine debe contener al menos una conexión.',
+                $exception->trans($translator)
+            );
+        }
+    }
+
     /** @return list<string> */
     private static function stringOptions(): array
     {

@@ -27,6 +27,8 @@
     "require": {
         "php": "^8.5",
         "derafu/translation": "dev-main",
+        "derafu/array": "dev-main",
+        "derafu/value": "dev-main",
         "derafu/spreadsheet": "dev-main",
         "phpoffice/phpspreadsheet": "^5.10",
         "doctrine/dbal": "^4.5",

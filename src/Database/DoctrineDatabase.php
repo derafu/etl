@@ -25,6 +25,8 @@ use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Spreadsheet\SpreadsheetFactory;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\Exception\ValueException;
+use Derafu\Value\ValueType;
 use Doctrine\DBAL\Connection as DoctrineConnection;
 use Doctrine\DBAL\Driver as DoctrineDriver;
 use Doctrine\DBAL\DriverManager as DoctrineDriverManager;
@@ -83,27 +85,33 @@ final class DoctrineDatabase extends AbstractDatabase implements TransactionalDa
             // overrides, until Doctrine corrects that contract. Then remove
             // this boundary validation; the general validators allow null.
             if (array_key_exists('user', $parameters)) {
-                $parameters['user'] = $this->connectionString($parameters['user'], 'user');
+                $parameters['user'] = $this->connectionValue($parameters['user'], 'user', ValueType::string());
             }
             if (array_key_exists('password', $parameters)) {
-                $parameters['password'] = $this->connectionString($parameters['password'], 'password');
+                $parameters['password'] = $this->connectionValue($parameters['password'], 'password', ValueType::string());
             }
             if (isset($parameters['primary'])) {
                 if (array_key_exists('user', $parameters['primary'])) {
-                    $parameters['primary']['user'] = $this->connectionString($parameters['primary']['user'], 'primary.user');
+                    $parameters['primary']['user'] = $this->connectionValue($parameters['primary']['user'], 'primary.user', ValueType::string());
                 }
                 if (array_key_exists('password', $parameters['primary'])) {
-                    $parameters['primary']['password'] = $this->connectionString($parameters['primary']['password'], 'primary.password');
+                    $parameters['primary']['password'] = $this->connectionValue($parameters['primary']['password'], 'primary.password', ValueType::string());
                 }
             }
             if (isset($parameters['replica'])) {
-                $replicas = [];
-                foreach ($parameters['replica'] as $key => $replica) {
+                $replicas = $parameters['replica'];
+                if ($replicas === []) {
+                    throw new InvalidArgumentException([
+                        'Doctrine option "{option}" must contain at least one connection.',
+                        'option' => 'replica',
+                    ]);
+                }
+                foreach ($replicas as $key => $replica) {
                     if (array_key_exists('user', $replica)) {
-                        $replica['user'] = $this->connectionString($replica['user'], 'replica.user');
+                        $replica['user'] = $this->connectionValue($replica['user'], 'replica.user', ValueType::string());
                     }
                     if (array_key_exists('password', $replica)) {
-                        $replica['password'] = $this->connectionString($replica['password'], 'replica.password');
+                        $replica['password'] = $this->connectionValue($replica['password'], 'replica.password', ValueType::string());
                     }
                     $replicas[$key] = $replica;
                 }
@@ -616,14 +624,10 @@ final class DoctrineDatabase extends AbstractDatabase implements TransactionalDa
         }
 
         if (preg_match('/^[+-]?[0-9]+$/D', $count) === 1) {
-            $negative = str_starts_with($count, '-');
-            $digits = ltrim(ltrim($count, '+-'), '0');
-            $limit = $negative ? substr((string) PHP_INT_MIN, 1) : (string) PHP_INT_MAX;
-            if (
-                strlen($digits) < strlen($limit)
-                || (strlen($digits) === strlen($limit) && strcmp($digits, $limit) <= 0)
-            ) {
-                return (int) $count;
+            try {
+                return ValueType::toInt()->parse($count);
+            } catch (ValueException $exception) {
+                throw new RuntimeException('Affected row count cannot be represented as a PHP integer.', previous: $exception);
             }
         }
 
@@ -789,22 +793,146 @@ final class DoctrineDatabase extends AbstractDatabase implements TransactionalDa
     {
         $parameters = $this->validateConnectionOverrides($parameters);
         if (array_key_exists('sid', $parameters)) {
-            $parameters['sid'] = $this->connectionString($parameters['sid'], 'sid');
+            $parameters['sid'] = $this->connectionValue($parameters['sid'], 'sid', ValueType::string());
         }
         if (array_key_exists('keepReplica', $parameters)) {
-            $parameters['keepReplica'] = $this->connectionBool($parameters['keepReplica'], 'keepReplica');
+            $parameters['keepReplica'] = $this->connectionValue($parameters['keepReplica'], 'keepReplica', ValueType::bool());
         }
         if (array_key_exists('primary', $parameters)) {
-            $parameters['primary'] = $this->validateConnectionOverrides($this->connectionArray($parameters['primary'], 'primary'));
+            $parameters['primary'] = $this->validateConnectionOverrides($this->connectionValue($parameters['primary'], 'primary', ValueType::array()));
         }
         if (array_key_exists('replica', $parameters)) {
-            $replicas = $this->connectionArray($parameters['replica'], 'replica');
+            $replicas = $this->connectionValue($parameters['replica'], 'replica', ValueType::array());
             $parameters['replica'] = array_map(
-                fn (mixed $replica): array => $this->validateConnectionOverrides($this->connectionArray($replica, 'replica')),
+                fn (mixed $replica): array => $this->validateConnectionOverrides($this->connectionValue($replica, 'replica', ValueType::array())),
                 $replicas
             );
         }
 
+        /**
+         * Runtime checks establish the types of the known options while driver
+         * and wrapper extension options retain their original values and order.
+         * PHPStan loses optional-field types when these open arrays are updated
+         * conditionally. Copying, merging or rebuilding an open array does not
+         * recover that shape; filtering to known keys discards supported options.
+         * This assertion is required for this contract with the current analyzer.
+         * Keep it synchronized with the checks above and the return contract:
+         * the annotation performs no validation and can hide missing checks.
+         *
+         * @var array{
+         *     application_name?: string,
+         *     charset?: string,
+         *     connectstring?: string,
+         *     dbname?: string,
+         *     defaultTableOptions?: array<string, mixed>,
+         *     driver?: 'ibm_db2'|'mysqli'|'oci8'|'pdo_mysql'|'pdo_oci'|'pdo_pgsql'|'pdo_sqlite'|'pdo_sqlsrv'|'pgsql'|'sqlite3'|'sqlsrv',
+         *     driverClass?: class-string<DoctrineDriver>,
+         *     driverOptions?: array<array-key, mixed>,
+         *     gssencmode?: string,
+         *     host?: string,
+         *     instancename?: string,
+         *     memory?: bool,
+         *     password?: string|null,
+         *     path?: string,
+         *     persistent?: bool,
+         *     pooled?: bool,
+         *     port?: int,
+         *     serverVersion?: string,
+         *     service?: bool,
+         *     servicename?: string,
+         *     sessionMode?: int,
+         *     ssl_ca?: string,
+         *     ssl_capath?: string,
+         *     ssl_cert?: string,
+         *     ssl_cipher?: string,
+         *     ssl_key?: string,
+         *     sslcert?: string,
+         *     sslcrl?: string,
+         *     sslkey?: string,
+         *     sslmode?: string,
+         *     sslrootcert?: string,
+         *     unix_socket?: string,
+         *     user?: string|null,
+         *     wrapperClass?: class-string<DoctrineConnection>,
+         *     sid?: string,
+         *     keepReplica?: bool,
+         *     primary?: array{
+         *         application_name?: string,
+         *         charset?: string,
+         *         connectstring?: string,
+         *         dbname?: string,
+         *         defaultTableOptions?: array<string, mixed>,
+         *         driver?: 'ibm_db2'|'mysqli'|'oci8'|'pdo_mysql'|'pdo_oci'|'pdo_pgsql'|'pdo_sqlite'|'pdo_sqlsrv'|'pgsql'|'sqlite3'|'sqlsrv',
+         *         driverClass?: class-string<DoctrineDriver>,
+         *         driverOptions?: array<array-key, mixed>,
+         *         gssencmode?: string,
+         *         host?: string,
+         *         instancename?: string,
+         *         memory?: bool,
+         *         password?: string|null,
+         *         path?: string,
+         *         persistent?: bool,
+         *         pooled?: bool,
+         *         port?: int,
+         *         serverVersion?: string,
+         *         service?: bool,
+         *         servicename?: string,
+         *         sessionMode?: int,
+         *         ssl_ca?: string,
+         *         ssl_capath?: string,
+         *         ssl_cert?: string,
+         *         ssl_cipher?: string,
+         *         ssl_key?: string,
+         *         sslcert?: string,
+         *         sslcrl?: string,
+         *         sslkey?: string,
+         *         sslmode?: string,
+         *         sslrootcert?: string,
+         *         unix_socket?: string,
+         *         user?: string|null,
+         *         wrapperClass?: class-string<DoctrineConnection>,
+         *         ...
+         *     },
+         *     replica?: array<array{
+         *         application_name?: string,
+         *         charset?: string,
+         *         connectstring?: string,
+         *         dbname?: string,
+         *         defaultTableOptions?: array<string, mixed>,
+         *         driver?: 'ibm_db2'|'mysqli'|'oci8'|'pdo_mysql'|'pdo_oci'|'pdo_pgsql'|'pdo_sqlite'|'pdo_sqlsrv'|'pgsql'|'sqlite3'|'sqlsrv',
+         *         driverClass?: class-string<DoctrineDriver>,
+         *         driverOptions?: array<array-key, mixed>,
+         *         gssencmode?: string,
+         *         host?: string,
+         *         instancename?: string,
+         *         memory?: bool,
+         *         password?: string|null,
+         *         path?: string,
+         *         persistent?: bool,
+         *         pooled?: bool,
+         *         port?: int,
+         *         serverVersion?: string,
+         *         service?: bool,
+         *         servicename?: string,
+         *         sessionMode?: int,
+         *         ssl_ca?: string,
+         *         ssl_capath?: string,
+         *         ssl_cert?: string,
+         *         ssl_cipher?: string,
+         *         ssl_key?: string,
+         *         sslcert?: string,
+         *         sslcrl?: string,
+         *         sslkey?: string,
+         *         sslmode?: string,
+         *         sslrootcert?: string,
+         *         unix_socket?: string,
+         *         user?: string|null,
+         *         wrapperClass?: class-string<DoctrineConnection>,
+         *         ...
+         *     }>,
+         *     ...
+         * } $parameters
+         */
         return $parameters;
     }
 
@@ -851,181 +979,212 @@ final class DoctrineDatabase extends AbstractDatabase implements TransactionalDa
     private function validateConnectionOverrides(array $parameters): array
     {
         if (array_key_exists('application_name', $parameters)) {
-            $parameters['application_name'] = $this->connectionString($parameters['application_name'], 'application_name');
+            $parameters['application_name'] = $this->connectionValue($parameters['application_name'], 'application_name', ValueType::string());
         }
         if (array_key_exists('charset', $parameters)) {
-            $parameters['charset'] = $this->connectionString($parameters['charset'], 'charset');
+            $parameters['charset'] = $this->connectionValue($parameters['charset'], 'charset', ValueType::string());
         }
         if (array_key_exists('connectstring', $parameters)) {
-            $parameters['connectstring'] = $this->connectionString($parameters['connectstring'], 'connectstring');
+            $parameters['connectstring'] = $this->connectionValue($parameters['connectstring'], 'connectstring', ValueType::string());
         }
         if (array_key_exists('dbname', $parameters)) {
-            $parameters['dbname'] = $this->connectionString($parameters['dbname'], 'dbname');
+            $parameters['dbname'] = $this->connectionValue($parameters['dbname'], 'dbname', ValueType::string());
         }
         if (array_key_exists('gssencmode', $parameters)) {
-            $parameters['gssencmode'] = $this->connectionString($parameters['gssencmode'], 'gssencmode');
+            $parameters['gssencmode'] = $this->connectionValue($parameters['gssencmode'], 'gssencmode', ValueType::string());
         }
         if (array_key_exists('host', $parameters)) {
-            $parameters['host'] = $this->connectionString($parameters['host'], 'host');
+            $parameters['host'] = $this->connectionValue($parameters['host'], 'host', ValueType::string());
         }
         if (array_key_exists('instancename', $parameters)) {
-            $parameters['instancename'] = $this->connectionString($parameters['instancename'], 'instancename');
+            $parameters['instancename'] = $this->connectionValue($parameters['instancename'], 'instancename', ValueType::string());
         }
         if (isset($parameters['password'])) {
-            $parameters['password'] = $this->connectionString($parameters['password'], 'password');
+            $parameters['password'] = $this->connectionValue($parameters['password'], 'password', ValueType::string());
         }
         if (array_key_exists('path', $parameters)) {
-            $parameters['path'] = $this->connectionString($parameters['path'], 'path');
+            $parameters['path'] = $this->connectionValue($parameters['path'], 'path', ValueType::string());
         }
         if (array_key_exists('serverVersion', $parameters)) {
-            $parameters['serverVersion'] = $this->connectionString($parameters['serverVersion'], 'serverVersion');
+            $parameters['serverVersion'] = $this->connectionValue($parameters['serverVersion'], 'serverVersion', ValueType::string());
         }
         if (array_key_exists('servicename', $parameters)) {
-            $parameters['servicename'] = $this->connectionString($parameters['servicename'], 'servicename');
+            $parameters['servicename'] = $this->connectionValue($parameters['servicename'], 'servicename', ValueType::string());
         }
         if (array_key_exists('ssl_ca', $parameters)) {
-            $parameters['ssl_ca'] = $this->connectionString($parameters['ssl_ca'], 'ssl_ca');
+            $parameters['ssl_ca'] = $this->connectionValue($parameters['ssl_ca'], 'ssl_ca', ValueType::string());
         }
         if (array_key_exists('ssl_capath', $parameters)) {
-            $parameters['ssl_capath'] = $this->connectionString($parameters['ssl_capath'], 'ssl_capath');
+            $parameters['ssl_capath'] = $this->connectionValue($parameters['ssl_capath'], 'ssl_capath', ValueType::string());
         }
         if (array_key_exists('ssl_cert', $parameters)) {
-            $parameters['ssl_cert'] = $this->connectionString($parameters['ssl_cert'], 'ssl_cert');
+            $parameters['ssl_cert'] = $this->connectionValue($parameters['ssl_cert'], 'ssl_cert', ValueType::string());
         }
         if (array_key_exists('ssl_cipher', $parameters)) {
-            $parameters['ssl_cipher'] = $this->connectionString($parameters['ssl_cipher'], 'ssl_cipher');
+            $parameters['ssl_cipher'] = $this->connectionValue($parameters['ssl_cipher'], 'ssl_cipher', ValueType::string());
         }
         if (array_key_exists('ssl_key', $parameters)) {
-            $parameters['ssl_key'] = $this->connectionString($parameters['ssl_key'], 'ssl_key');
+            $parameters['ssl_key'] = $this->connectionValue($parameters['ssl_key'], 'ssl_key', ValueType::string());
         }
         if (array_key_exists('sslcert', $parameters)) {
-            $parameters['sslcert'] = $this->connectionString($parameters['sslcert'], 'sslcert');
+            $parameters['sslcert'] = $this->connectionValue($parameters['sslcert'], 'sslcert', ValueType::string());
         }
         if (array_key_exists('sslcrl', $parameters)) {
-            $parameters['sslcrl'] = $this->connectionString($parameters['sslcrl'], 'sslcrl');
+            $parameters['sslcrl'] = $this->connectionValue($parameters['sslcrl'], 'sslcrl', ValueType::string());
         }
         if (array_key_exists('sslkey', $parameters)) {
-            $parameters['sslkey'] = $this->connectionString($parameters['sslkey'], 'sslkey');
+            $parameters['sslkey'] = $this->connectionValue($parameters['sslkey'], 'sslkey', ValueType::string());
         }
         if (array_key_exists('sslmode', $parameters)) {
-            $parameters['sslmode'] = $this->connectionString($parameters['sslmode'], 'sslmode');
+            $parameters['sslmode'] = $this->connectionValue($parameters['sslmode'], 'sslmode', ValueType::string());
         }
         if (array_key_exists('sslrootcert', $parameters)) {
-            $parameters['sslrootcert'] = $this->connectionString($parameters['sslrootcert'], 'sslrootcert');
+            $parameters['sslrootcert'] = $this->connectionValue($parameters['sslrootcert'], 'sslrootcert', ValueType::string());
         }
         if (array_key_exists('unix_socket', $parameters)) {
-            $parameters['unix_socket'] = $this->connectionString($parameters['unix_socket'], 'unix_socket');
+            $parameters['unix_socket'] = $this->connectionValue($parameters['unix_socket'], 'unix_socket', ValueType::string());
         }
         if (isset($parameters['user'])) {
-            $parameters['user'] = $this->connectionString($parameters['user'], 'user');
+            $parameters['user'] = $this->connectionValue($parameters['user'], 'user', ValueType::string());
         }
         if (array_key_exists('memory', $parameters)) {
-            $parameters['memory'] = $this->connectionBool($parameters['memory'], 'memory');
+            $parameters['memory'] = $this->connectionValue($parameters['memory'], 'memory', ValueType::bool());
         }
         if (array_key_exists('persistent', $parameters)) {
-            $parameters['persistent'] = $this->connectionBool($parameters['persistent'], 'persistent');
+            $parameters['persistent'] = $this->connectionValue($parameters['persistent'], 'persistent', ValueType::bool());
         }
         if (array_key_exists('pooled', $parameters)) {
-            $parameters['pooled'] = $this->connectionBool($parameters['pooled'], 'pooled');
+            $parameters['pooled'] = $this->connectionValue($parameters['pooled'], 'pooled', ValueType::bool());
         }
         if (array_key_exists('service', $parameters)) {
-            $parameters['service'] = $this->connectionBool($parameters['service'], 'service');
+            $parameters['service'] = $this->connectionValue($parameters['service'], 'service', ValueType::bool());
         }
         if (array_key_exists('port', $parameters)) {
-            $parameters['port'] = $this->connectionInt($parameters['port'], 'port');
+            $parameters['port'] = $this->connectionValue($parameters['port'], 'port', ValueType::int());
         }
         if (array_key_exists('sessionMode', $parameters)) {
-            $parameters['sessionMode'] = $this->connectionInt($parameters['sessionMode'], 'sessionMode');
+            $parameters['sessionMode'] = $this->connectionValue($parameters['sessionMode'], 'sessionMode', ValueType::int());
         }
         if (array_key_exists('driverOptions', $parameters)) {
-            $parameters['driverOptions'] = $this->connectionArray($parameters['driverOptions'], 'driverOptions');
+            $parameters['driverOptions'] = $this->connectionValue($parameters['driverOptions'], 'driverOptions', ValueType::array());
         }
         if (array_key_exists('defaultTableOptions', $parameters)) {
-            $parameters['defaultTableOptions'] = $this->connectionArray($parameters['defaultTableOptions'], 'defaultTableOptions');
-            $options = [];
-            foreach ($parameters['defaultTableOptions'] as $key => $value) {
-                if (!is_string($key)) {
-                    throw new InvalidArgumentException('Doctrine defaultTableOptions must have string keys.');
-                }
-                $options[$key] = $value;
+            $options = $this->connectionValue($parameters['defaultTableOptions'], 'defaultTableOptions', ValueType::array());
+            try {
+                $parameters['defaultTableOptions'] = ValueType::map()->parse($options, path: 'defaultTableOptions');
+            } catch (ValueException $exception) {
+                throw new InvalidArgumentException('Doctrine defaultTableOptions must have string keys.', previous: $exception);
             }
-            $parameters['defaultTableOptions'] = $options;
         }
         if (array_key_exists('driver', $parameters)) {
-            $driver = $this->connectionString($parameters['driver'], 'driver');
+            $driver = $this->connectionValue($parameters['driver'], 'driver', ValueType::string());
             if (!in_array($driver, DoctrineDriverManager::getAvailableDrivers(), true)) {
                 throw new InvalidArgumentException('Unknown Doctrine driver.');
             }
             $parameters['driver'] = $driver;
         }
         if (array_key_exists('driverClass', $parameters)) {
-            $class = $parameters['driverClass'];
-            if (!is_string($class) || !is_a($class, DoctrineDriver::class, true)) {
-                throw new InvalidArgumentException('Doctrine driverClass must implement Doctrine DBAL Driver.');
+            try {
+                $parameters['driverClass'] = ValueType::classString(DoctrineDriver::class)->parse($parameters['driverClass'], path: 'driverClass');
+            } catch (ValueException $exception) {
+                throw new InvalidArgumentException('Doctrine driverClass must implement Doctrine DBAL Driver.', previous: $exception);
             }
-            $parameters['driverClass'] = $class;
         }
         if (array_key_exists('wrapperClass', $parameters)) {
-            $class = $parameters['wrapperClass'];
-            if (!is_string($class) || !is_a($class, DoctrineConnection::class, true)) {
-                throw new InvalidArgumentException('Doctrine wrapperClass must extend Doctrine DBAL Connection.');
+            try {
+                $parameters['wrapperClass'] = ValueType::classString(DoctrineConnection::class)->parse($parameters['wrapperClass'], path: 'wrapperClass');
+            } catch (ValueException $exception) {
+                throw new InvalidArgumentException('Doctrine wrapperClass must extend Doctrine DBAL Connection.', previous: $exception);
             }
-            $parameters['wrapperClass'] = $class;
         }
 
+        /**
+         * Runtime checks establish the types of the known options while driver
+         * and wrapper extension options retain their original values and order.
+         * PHPStan loses optional-field types when these open arrays are updated
+         * conditionally. Copying, merging or rebuilding an open array does not
+         * recover that shape; filtering to known keys discards supported options.
+         * This assertion is required for this contract with the current analyzer.
+         * Keep it synchronized with the checks above and the return contract:
+         * the annotation performs no validation and can hide missing checks.
+         *
+         * @var array{
+         *     application_name?: string,
+         *     charset?: string,
+         *     connectstring?: string,
+         *     dbname?: string,
+         *     defaultTableOptions?: array<string, mixed>,
+         *     driver?: 'ibm_db2'|'mysqli'|'oci8'|'pdo_mysql'|'pdo_oci'|'pdo_pgsql'|'pdo_sqlite'|'pdo_sqlsrv'|'pgsql'|'sqlite3'|'sqlsrv',
+         *     driverClass?: class-string<DoctrineDriver>,
+         *     driverOptions?: array<array-key, mixed>,
+         *     gssencmode?: string,
+         *     host?: string,
+         *     instancename?: string,
+         *     memory?: bool,
+         *     password?: string|null,
+         *     path?: string,
+         *     persistent?: bool,
+         *     pooled?: bool,
+         *     port?: int,
+         *     serverVersion?: string,
+         *     service?: bool,
+         *     servicename?: string,
+         *     sessionMode?: int,
+         *     ssl_ca?: string,
+         *     ssl_capath?: string,
+         *     ssl_cert?: string,
+         *     ssl_cipher?: string,
+         *     ssl_key?: string,
+         *     sslcert?: string,
+         *     sslcrl?: string,
+         *     sslkey?: string,
+         *     sslmode?: string,
+         *     sslrootcert?: string,
+         *     unix_socket?: string,
+         *     user?: string|null,
+         *     wrapperClass?: class-string<DoctrineConnection>,
+         *     ...
+         * } $parameters
+         */
         return $parameters;
     }
 
-    private function connectionString(mixed $value, string $option): string
+    /**
+     * Validate a value while retaining the package's contextual exception.
+     *
+     * @template T
+     * @param mixed $value
+     * @param string $field
+     * @param ValueType<T> $type
+     * @return T
+     */
+    private function connectionValue(mixed $value, string $field, ValueType $type): mixed
     {
-        if (!is_string($value)) {
-            throw new InvalidArgumentException([
-                'Doctrine option "{option}" must be a string; {type} given.',
-                'option' => $option,
-                'type' => get_debug_type($value),
-            ]);
+        try {
+            return $type->parse($value, path: $field);
+        } catch (ValueException $exception) {
+            throw match ($type->name) {
+                'string' => new InvalidArgumentException([
+                    'Doctrine option "{option}" must be a string; {type} given.',
+                    'option' => $field,
+                    'type' => get_debug_type($value),
+                ], previous: $exception),
+                'bool' => new InvalidArgumentException([
+                    'Doctrine option "{option}" must be a boolean; {type} given.',
+                    'option' => $field,
+                    'type' => get_debug_type($value),
+                ], previous: $exception),
+                'int' => new InvalidArgumentException([
+                    'Doctrine option "{option}" must be an integer; {type} given.',
+                    'option' => $field,
+                    'type' => get_debug_type($value),
+                ], previous: $exception),
+                default => new InvalidArgumentException([
+                    'Doctrine option "{option}" must be an array; {type} given.',
+                    'option' => $field,
+                    'type' => get_debug_type($value),
+                ], previous: $exception),
+            };
         }
-
-        return $value;
-    }
-
-    private function connectionBool(mixed $value, string $option): bool
-    {
-        if (!is_bool($value)) {
-            throw new InvalidArgumentException([
-                'Doctrine option "{option}" must be a boolean; {type} given.',
-                'option' => $option,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
-    }
-
-    private function connectionInt(mixed $value, string $option): int
-    {
-        if (!is_int($value)) {
-            throw new InvalidArgumentException([
-                'Doctrine option "{option}" must be an integer; {type} given.',
-                'option' => $option,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
-    }
-
-    /** @return array<array-key, mixed> */
-    private function connectionArray(mixed $value, string $option): array
-    {
-        if (!is_array($value)) {
-            throw new InvalidArgumentException([
-                'Doctrine option "{option}" must be an array; {type} given.',
-                'option' => $option,
-                'type' => get_debug_type($value),
-            ]);
-        }
-
-        return $value;
     }
 }

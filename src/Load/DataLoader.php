@@ -19,6 +19,8 @@ use Derafu\ETL\Load\Contract\DataLoaderInterface;
 use Derafu\ETL\Load\Contract\DataTargetInterface;
 use Derafu\Spreadsheet\Contract\SpreadsheetInterface;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\Exception\ValueException;
+use Derafu\Value\ValueType;
 
 /**
  * DataLoader is responsible for loading data from a source to a target.
@@ -77,12 +79,14 @@ final class DataLoader implements DataLoaderInterface
             if ((string) $table === '') {
                 throw new InvalidArgumentException('Table names must not be empty.');
             }
-            if (!is_array($rows)) {
+            try {
+                $rows = ValueType::array()->parse($rows, path: (string) $table);
+            } catch (ValueException $exception) {
                 throw new InvalidArgumentException([
                     'Rows for table "{table}" must be an array; {type} given.',
                     'table' => (string) $table,
                     'type' => get_debug_type($rows),
-                ]);
+                ], previous: $exception);
             }
             $validated[$table] = $rows;
         }
